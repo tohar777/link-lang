@@ -17,13 +17,13 @@ bool Parser::isBlockStart() const {
 bool Parser::consumeBlockStart() {
     if (match(TokenType::INDENT)) return true;
     if (match(TokenType::LBRACE)) return true;
-    throw std::runtime_error("Expected block start (indent or {)");
+    throw std::runtime_error("There's an expected block/bracket start (indent or {)");
 }
 
 bool Parser::consumeBlockEnd() {
     if (match(TokenType::DEDENT)) return true;
     if (match(TokenType::RBRACE)) return true;
-    throw std::runtime_error("Expected block end (dedent or })");
+    throw std::runtime_error("There's an expected block/bracket end (dedent or })");
 }
 
 
@@ -54,11 +54,11 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
 }
 
 std::unique_ptr<AppDecl> Parser::parseApp() {
-    auto name = consume(TokenType::IDENTIFIER, "Expected app name").value;
+    auto name = consume(TokenType::IDENTIFIER, "There's an expected app name").value;
 
     // accept either NEWLINE or { immediately after the name
     if (!match(TokenType::NEWLINE) && !match(TokenType::LBRACE)) {
-        throw std::runtime_error("Expected newline or { after app name");
+        throw std::runtime_error("There's an expected newline or { after your app name");
     }
 
     // if we saw LBRACE instead of NEWLINE, put it back so consumeBlockStart handles it
@@ -80,10 +80,10 @@ std::unique_ptr<AppDecl> Parser::parseApp() {
 }
 
 std::unique_ptr<WindowDecl> Parser::parseWindow() {
-    auto name = consume(TokenType::IDENTIFIER, "Expected window name").value;
+    auto name = consume(TokenType::IDENTIFIER, "There's an expected window name").value;
 
     if (!match(TokenType::NEWLINE) && !match(TokenType::LBRACE)) {
-        throw std::runtime_error("Expected newline or { after window name");
+        throw std::runtime_error("There's an expected newline or { after your window name");
     }
 
     if (peek().type != TokenType::INDENT && peek().type != TokenType::LBRACE) {
@@ -103,10 +103,10 @@ std::unique_ptr<WindowDecl> Parser::parseWindow() {
 }
 
 std::unique_ptr<FuncDecl> Parser::parseFunc() {
-    auto name = consume(TokenType::IDENTIFIER, "Expected function name").value;
+    auto name = consume(TokenType::IDENTIFIER, "There's an expected function name").value;
 
     if (!match(TokenType::NEWLINE) && !match(TokenType::LBRACE)) {
-        throw std::runtime_error("Expected newline or { after function name");
+        throw std::runtime_error("There's an expected newline or { after your function's name");
     }
 
     if (peek().type != TokenType::INDENT && peek().type != TokenType::LBRACE) {
@@ -126,11 +126,22 @@ std::unique_ptr<FuncDecl> Parser::parseFunc() {
 }
 
 std::unique_ptr<ConnectStmt> Parser::parseConnect() {
-    auto source = consume(TokenType::IDENTIFIER, "Expected source in connect").value;
-    consume(TokenType::DOT, "Expected dot in connect");
-    auto event = consume(TokenType::IDENTIFIER, "Expected event in connect").value;
-    consume(TokenType::ARROW, "Expected arrow in connect");
-    auto target = consume(TokenType::IDENTIFIER, "Expected target in connect").value;
+    auto source = consume(TokenType::IDENTIFIER, "There's an expected source in connect").value;
+    consume(TokenType::DOT, "There's an expected dot in connect");
+    auto event = consume(TokenType::IDENTIFIER, "There's an expected event in connect").value;
+
+    consume(TokenType::LPAREN, "There's an expected '(' after event in connect");
+
+    if (peek().type != TokenType::IDENTIFIER) {
+        throw std::runtime_error("There's an expected target inside parentheses");
+    }
+
+    std::cout << "Next token: " << peek().value << " type=" << (int)peek().type << "\n";
+    auto target = consume(TokenType::IDENTIFIER, "There's an expected target inside parentheses").value;
+
+
+    consume(TokenType::RPAREN, "There's an expected ')' after target");
+
     return std::make_unique<ConnectStmt>(source, event, target);
 }
 

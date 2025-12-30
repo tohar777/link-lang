@@ -16,16 +16,17 @@ int main(int argc, char** argv) {
     Lexer lexer(source);
     auto tokens = lexer.tokenize();
 
+    //for (auto &tok : tokens) {
+    //    std::cout << tok.line << ": '" << tok.value
+    //            << "' type=" << static_cast<int>(tok.type)
+    //            << " column=" << tok.column << "\n";
+    //}
+
     Parser parser(tokens);
     auto program = parser.parse(); // PARSE YOU PARSER.
                             
     program->print();
     return 0;
 
-    //Just for debugging, not needed.
-    //for (auto& t : tokens) {
-    //    std::cout << (int)t.type << " [" << t.value << "] "
-    //              << "line " << t.line << "\n";
-    //}
 }
 

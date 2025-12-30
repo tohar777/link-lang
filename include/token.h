@@ -19,6 +19,9 @@ enum class TokenType {
     // Symbols
     LBRACE,
     RBRACE,
+    LPAREN,
+    RPAREN,
+    COMMA,
     ARROW,
     DOT,
 
@@ -35,5 +38,11 @@ struct Token {
     std::string value;
     int line;
     int column;
-};
 
+    // Default constructor
+    Token() : type(TokenType::UNKNOWN), value(""), line(0), column(0) {}
+
+    // Constructor with line and column
+    Token(TokenType t, const std::string& v, int l, int c)
+        : type(t), value(v), line(l), column(c) {}
+};

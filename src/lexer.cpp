@@ -12,6 +12,10 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"package", TokenType::PACKAGE}
 };
 
+bool isAlphaNumeric(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+}
+
 Lexer::Lexer(const std::string& source)
     : src(source), pos(0), line(1), column(1) {
     indentStack.push_back(0);
@@ -51,11 +55,11 @@ void Lexer::skipWhitespace() {
 Token Lexer::identifier() {
     int startCol = column;
     std::string value;
-
-    while (std::isalnum(peek()) || peek() == '_') {
-        value += advance();
+    while (isAlphaNumeric(peek())) {
+        value += advance(); // consumes the character
     }
 
+    // Check if keyword
     auto it = keywords.find(value);
     if (it != keywords.end()) {
         return Token{it->second, value, line, startCol};
@@ -163,6 +167,18 @@ std::vector<Token> Lexer::tokenize() {
         if (c == '}') {
             advance();
             tokens.push_back(makeToken(TokenType::RBRACE));
+            continue;
+        }
+
+        if (c == '(') {
+            advance();
+            tokens.push_back(Token(TokenType::LPAREN, "(", line, column));
+            continue;
+        }
+
+        if (c == ')') {
+            advance();
+            tokens.push_back(Token(TokenType::RPAREN, ")", line, column));
             continue;
         }
 
