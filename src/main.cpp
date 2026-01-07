@@ -13,6 +13,12 @@ int main(int argc, char** argv) {
     std::string source((std::istreambuf_iterator<char>(file)),
                         std::istreambuf_iterator<char>());
 
+    if(!file){
+        std::count << "No such file or directory \n" << std::endl;
+        return 1;
+    }
+
+    
     Lexer lexer(source);
     auto tokens = lexer.tokenize();
 
