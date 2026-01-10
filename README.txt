@@ -26,6 +26,7 @@ cd link-lang
 
 g++ src/*.cpp -I include -o link
 
+(Other build instructions for different compilers will be added later)
 
 3. Run an example
 
