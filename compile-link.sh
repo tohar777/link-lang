@@ -15,7 +15,7 @@ sleep 1
 
 # 4. Check for errors and display results
 if [ -s error.txt ]; then
-    echo "❌ There an Error Dude! Showing error.log:"
+    echo "There an Error Dude! Showing error.log:"
     echo "-----------------------------------"
     cat error.txt
 else
