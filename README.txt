@@ -10,7 +10,7 @@ Current Status:
 - Lexer: tokenizes keywords, identifiers, and strings
 - Parser: parses scripts and builds an AST
 - AST: minimal representation for apps and functions
-- Execution/runtime: X not implemented yet
+- Execution/runtime: Pre-Executable .link File and Pre-Terminal Function " ./link --help " 
 
 -----
 
