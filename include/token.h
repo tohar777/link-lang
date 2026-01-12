@@ -2,32 +2,27 @@
 #include <string>
 
 enum class TokenType {
-    // Structure
-    INDENT,
-    DEDENT,
-    NEWLINE,
-    EOF_TOKEN,
-
     // Keywords
-    APP,
-    WINDOW,
-    FUNC,
-    EXPOSE,
-    CONNECT,
-    PACKAGE,
+    APP, WINDOW, FUNC, EXPOSE, CONNECT, PACKAGE, SH, FOR, IN, SET, 
+    WHILE, IF, ELIF, ELSE,
+    TRUE, FALSE, // [NEW] Boolean keywords
+
+    // Structural
+    INDENT, DEDENT, NEWLINE, EOF_TOKEN,
+
+    // Literals & Identifiers
+    IDENTIFIER, 
+    STRING,     // "abc" atau 'abc'
+    CHAR,       // 'a'
+    TOKEN_NUM,  // 123
+    TOKEN_FLOAT,// 12.34 [NEW]
 
     // Symbols
-    LBRACE,
-    RBRACE,
-    ARROW,
-    DOT,
-
-    // Literals
-    IDENTIFIER,
-    STRING,
-
-    // Misc
-    UNKNOWN
+    LBRACE, RBRACE,    
+    LPAREN, RPAREN,    
+    ARROW, DOT, PLUS, MINUS, STAR, SLASH, PLUS_PLUS,
+    ASSIGN, 
+    LT, GT, EQ_EQ 
 };
 
 struct Token {
@@ -36,4 +31,3 @@ struct Token {
     int line;
     int column;
 };
-
