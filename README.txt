@@ -11,6 +11,7 @@ Current Status:
 - Parser: parses scripts and builds an AST
 - AST: minimal representation for apps and functions
 - Execution/runtime: Based Pre-Execution .link file and Pre-Terminal 
+- Execution/runtime: Pre-Executable .link File and Pre-Terminal Function " ./link --help " 
 
 -----
 
