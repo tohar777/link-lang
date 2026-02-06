@@ -8,13 +8,12 @@
 #include "os.h" 
 
 struct Value;
-struct Stmt;         
-struct LinkClass;    
-struct LinkInstance; 
+struct Stmt;        
+struct LinkClass;   
+struct LinkInstance;
 
 using List = std::vector<Value>;
 using Dict = std::unordered_map<std::string, Value>;
-
 struct Value {
     using ValVariant = std::variant<
         std::monostate, 
@@ -40,24 +39,19 @@ struct Value {
     Value(bool v) : as(v) {}
     Value(std::shared_ptr<List> v) : as(v) {}
     Value(std::shared_ptr<Dict> v) : as(v) {}
-    
-    // [BARU] Constructor untuk OOP
     Value(std::shared_ptr<LinkClass> v) : as(v) {}
     Value(std::shared_ptr<LinkInstance> v) : as(v) {}
 };
 
 using Obj = Value;
-
 struct LinkClass {
     std::string name;
     std::unordered_map<std::string, Stmt*> methods; 
 };
-
 struct LinkInstance {
-    std::shared_ptr<LinkClass> klass;      
-    std::unordered_map<std::string, Value> fields; 
-    };
-
+    std::shared_ptr<LinkClass> klass;        
+    std::unordered_map<std::string, Value> fields;  
+};
 inline void printObj(const Obj& val) {
     if (std::holds_alternative<int>(val.as)) std::cout << std::get<int>(val.as);
     else if (std::holds_alternative<double>(val.as)) std::cout << std::get<double>(val.as);
@@ -100,6 +94,9 @@ struct ReturnException {
 	ReturnException(Obj v) : value(v) {}
 };
 
+struct BreakException {}; 
+
+struct ContinueException {}; 
 struct RuntimeException {
     std::string message;
     RuntimeException(std::string msg) : message(msg) {}

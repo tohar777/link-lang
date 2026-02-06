@@ -1,2 +1,0 @@
-set config = {"theme": "dark", "version":1.0}
-print(config["theme"])

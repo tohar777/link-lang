@@ -24,7 +24,6 @@ private:
     std::unique_ptr<FuncDecl> parseFunc();
     
     std::unique_ptr<Stmt> parseClass();
-    
     std::unique_ptr<Stmt> parseFor(); 
     std::unique_ptr<Stmt> parseTry();
     std::unique_ptr<Stmt> parseWhile(); 
@@ -32,8 +31,13 @@ private:
     std::unique_ptr<Stmt> parseSet();
     std::unique_ptr<Stmt> parseReturn();
 	
-    // Expression Hierarchy
+    // Expression Hierarchy (Updated for Logic Ops)
     std::unique_ptr<Expr> parseExpression();
+    std::unique_ptr<Expr> parseLogicOr();
+    std::unique_ptr<Expr> parseLogicAnd();
+    std::unique_ptr<Expr> parseEquality();
+    std::unique_ptr<Expr> parseBitwise(); 
+    
     std::unique_ptr<Expr> parseAdditive();
     std::unique_ptr<Expr> parseTerm();
     std::unique_ptr<Expr> parseUnary(); 

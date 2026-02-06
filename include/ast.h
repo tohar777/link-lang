@@ -9,12 +9,6 @@ struct Expr {
     virtual void print() const = 0;
 };
 
-struct InputExpr : public Expr {
-    std::string prompt;
-    InputExpr(std::string p) : prompt(p) {}
-    void print() const override { std::cout << "input(\"" << prompt << "\")"; }
-};
-
 struct NumberExpr : public Expr {
     int value;
     NumberExpr(int v) : value(v) {}
@@ -75,8 +69,7 @@ struct ThisExpr : public Expr {
     Token keyword;
     ThisExpr(Token k) : keyword(k) {}
     void print() const override { std::cout << "this"; }
-};
-
+}; 
 struct GetExpr : public Expr {
     std::unique_ptr<Expr> object;
     std::string name;
@@ -87,8 +80,7 @@ struct GetExpr : public Expr {
     void print() const override { 
         object->print(); std::cout << "." << name; 
     }
-};
-
+}; 
 struct SetExpr : public Expr {
     std::unique_ptr<Expr> object;
     std::string name;
@@ -160,6 +152,19 @@ struct SetStmt : public Stmt {
     }
 };
 
+struct SetIndexStmt : public Stmt {
+    std::unique_ptr<Expr> list;   
+    std::unique_ptr<Expr> index; 
+    std::unique_ptr<Expr> value;  
+
+    SetIndexStmt(std::unique_ptr<Expr> l, std::unique_ptr<Expr> i, std::unique_ptr<Expr> v)
+    : list(std::move(l)), index(std::move(i)), value(std::move(v)) {}
+
+    void print(int indent = 0) override {
+        std::cout << std::string(indent, ' ') << "SetIndex [...]\n";
+    }
+};
+
 struct WhileStmt : public Stmt {
     std::unique_ptr<Expr> condition;
     std::vector<std::unique_ptr<Stmt>> body;
@@ -207,10 +212,10 @@ struct FuncDecl : public Stmt {
     }
 };
 
-// 4. Deklarasi Class (Cetakan)
+ 
 struct ClassDecl : public Stmt {
     std::string name;
-    std::vector<std::unique_ptr<FuncDecl>> methods; // Class isinya kumpulan fungsi (method)
+    std::vector<std::unique_ptr<FuncDecl>> methods;  
 
     ClassDecl(std::string n, std::vector<std::unique_ptr<FuncDecl>> m) 
     : name(n), methods(std::move(m)) {}
@@ -286,7 +291,7 @@ struct ImportStmt : public Stmt {
 struct TryStmt : public Stmt {
     std::vector<std::unique_ptr<Stmt>> tryBody;
     std::vector<std::unique_ptr<Stmt>> catchBody;
-    std::string errorVar; // Nama variabel untuk menangkap pesan error (misal: "e")
+    std::string errorVar; 
 
     TryStmt(std::vector<std::unique_ptr<Stmt>> tb, 
             std::vector<std::unique_ptr<Stmt>> cb, 
@@ -301,7 +306,7 @@ struct TryStmt : public Stmt {
     }
 };
 
-// 5. Ekspresi 'new' (Membuat Instance)
+ 
 struct NewExpr : public Expr {
     std::string className;
     std::vector<std::unique_ptr<Expr>> args;
@@ -310,10 +315,7 @@ struct NewExpr : public Expr {
     : className(n), args(std::move(a)) {}
     
     void print() const override { std::cout << "new " << className << "(...)"; }
-};
-
-// 6. Expression Statement (Menjalankan ekspresi sebagai statement)
-// Berguna untuk: "r1.jalan()", "this.energi = 5"
+}; 
 struct ExprStmt : public Stmt {
     std::unique_ptr<Expr> expression;
     ExprStmt(std::unique_ptr<Expr> e) : expression(std::move(e)) {}
@@ -322,5 +324,17 @@ struct ExprStmt : public Stmt {
         std::cout << std::string(indent, ' ') << "ExprStmt\n";
         if(expression) expression->print(); 
         std::cout << "\n";
+    }
+};
+
+struct BreakStmt : public Stmt {
+    void print(int indent = 0) override {
+        std::cout << std::string(indent, ' ') << "Break\n";
+    }
+};
+
+struct ContinueStmt : public Stmt {
+    void print(int indent = 0) override {
+        std::cout << std::string(indent, ' ') << "Continue\n";
     }
 };

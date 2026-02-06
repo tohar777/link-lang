@@ -1,0 +1,90 @@
+Link-Language v0.4a Documentation:
+Module : link_str, link_gui, link_std, link_net
+
+Basics & Variables
+set name = "Nebula" # String
+set version = 0.4 # Float
+set is_active = true # Boolean
+set count = 10 # Integer
+set count += 5 # Compound Assignment (+=, -=, *=, /=)
+print("Hello " + name)
+set ask = input("Name: ") # User input
+
+Data Structures
+set fruits = ["Apple", "Orange"]
+list.add(fruits, "Mango") # Add item
+print(fruits[0]) # Index access
+print(len(fruits)) # Length of List, String, or Dict
+
+set config = {"os": "Nebula", "ver": 2.0}
+print(config["os"]) # Access by key
+
+Logic & Loops
+if x > 80 {
+print("Pass")
+} elif x > 50 {
+print("Retake")
+} else {
+print("Fail")
+}
+
+for i in range(5) { print(i) } # Range loop
+for item in fruits { print(item) } # Collection loop
+
+while x < 5 {
+print(x)
+set x += 1
+}
+
+Math Library (math)
+math.abs(-5) # Absolute
+math.pow(2, 3) # Power
+math.sqrt(16) # Square root
+math.pi() # PI Constant
+math.sin(1.5) # Sine (Radians)
+math.randint(1, 10) # Random integer
+
+String Library (str)
+str.trim(" text ") # Remove whitespace
+str.replace("abc", "a", "z") # Replace substring
+str.contains("hello", "he") # Check substring
+str.split("a,b", ",") # Split to List
+str.merge(list_data, "-") # Join List to String
+str.lower("ABC") # Lowercase
+str.upper("abc") # Uppercase
+
+OS & File I/O (os & io)
+io.read("file.txt") # Read file
+io.write("file.txt", "data") # Write file
+io.exists("file.txt") # Check existence
+os.exec("dir") # Execute shell command
+os.getenv("PATH") # Get environment variable
+
+Functions & OOP
+func greet(n) {
+print("Hello " + n)
+}
+
+class Robot {
+init(n) { set this.name = n } # Constructor
+func walk() { print(this.name + " is walking") }
+}
+set r = new Robot("RX-78")
+r.walk()
+
+GUI & Networking
+gui_setup(800, 600, "App") # Initialize window
+gui_clear("blue") # Background color
+gui_text(10, 10, "Hi", "white", 20)
+
+set server = net.server(8080) # Create TCP server
+set client = net.connect("127.0.0.1", 8080)
+
+Error Handling
+try {
+
+Risky code
+
+} catch (e) {
+print("Error caught: " + e)
+}

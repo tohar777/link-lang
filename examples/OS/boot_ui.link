@@ -1,0 +1,58 @@
+# === NEBULA OS BOOT SEQUENCER ===
+
+term.clear()
+
+# 1. Gambar Logo Header
+term.move(2, 10)
+print(term.color("cyan") + "╔══════════════════════════════════╗" + term.reset())
+term.move(3, 10)
+print(term.color("cyan") + "║      L I N K - L A N G           ║" + term.reset())
+term.move(4, 10)
+print(term.color("cyan") + "╚══════════════════════════════════╝" + term.reset())
+
+term.move(6, 10)
+print("System Version: " + term.color("yellow") + "v0.4a (Alpha Release)" + term.reset())
+
+# 2. Fungsi Animasi Loading Bar
+func progressBar(step, total) {
+    term.move(8, 10)
+    print("Loading modules: [" + term.color("green"))
+    
+    # Gambar bar (misal: "#####")
+    term.move(10, 28)
+    for i in range(step) {
+        # Trik: print tanpa newline (pakai io.write ke stdout kalau mau perfect, 
+        # tapi print biasa juga oke asal di posisi yang pas)
+    }
+    # Karena print kita otomatis newline, kita akali dengan update status teks saja
+    term.move(10, 30 + step) 
+    print("#") 
+}
+
+# 3. Simulasi Booting
+set steps = [
+    "Kernel Initialization...",
+    "Mounting File System...",
+    "Loading Drivers (math_tools)...",
+    "Starting Network Service...",
+    "User Interface Ready."
+]
+
+set y_pos = 12
+
+for status in steps {
+    # Tampilkan Status
+    term.move(y_pos, 10)
+    print(term.color("white") + "[ " + term.color("green") + "OK" + term.color("white") + " ] " + status + term.reset())
+    
+    # Jeda biar kelihatan mikir
+    time.sleep(800)
+    set y_pos = y_pos + 1
+}
+
+term.move(y_pos + 2, 10)
+print(term.color("magenta") + ">>> WELCOME TO LINK TERMINAL <<<" + term.reset())
+term.move(y_pos + 8, 2)
+print(" ")
+time.sleep(3000)
+os.exec("./link")

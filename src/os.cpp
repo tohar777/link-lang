@@ -84,7 +84,6 @@ namespace Sys {
         }
         return res;
     }
-
     std::string getEnv(const std::string& key) {
         char* val = std::getenv(key.c_str());
         return val ? std::string(val) : "";

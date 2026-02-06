@@ -18,8 +18,7 @@ struct Environment {
     Obj get(const std::string& name) {
         if (values.count(name)) return values[name];
         if (enclosing) return enclosing->get(name);
-        return Obj(); 
-    }
+        return Obj();  
 
     void assign(const std::string& name, Obj val) {
         if (values.count(name)) {
@@ -30,6 +29,6 @@ struct Environment {
             enclosing->assign(name, val);
             return;
         }
-        values[name] = val; 
+        values[name] = val;  
     }
 };

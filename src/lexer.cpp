@@ -14,6 +14,8 @@ static const std::unordered_map<std::string, TokenType> keywords = {
 
     {"package", TokenType::PACKAGE},    {"sh", TokenType::SH},
     {"in", TokenType::IN},              {"set", TokenType::SET},
+    {"break", TokenType::BREAK},			{"continue", TokenType::CONTINUE}, 
+    {"and", TokenType::AND}, 			{"or", TokenType::OR}, 
     {"true", TokenType::TRUE},          {"false", TokenType::FALSE}, 
     {"clear", TokenType::CLEAR},        {"cls", TokenType::CLS} 
 };
@@ -125,6 +127,13 @@ std::vector<Token> Lexer::tokenize() {
             continue;
         }
         
+        if (c == '!') {
+            advance();
+            if (match('=')) tokens.push_back(makeToken(TokenType::BANG_EQ, "!="));
+            else tokens.push_back(makeToken(TokenType::BANG, "!"));
+            continue;
+        }
+        
         if (c == '(') { advance(); tokens.push_back(makeToken(TokenType::LPAREN, "(")); continue; }
         if (c == ')') { advance(); tokens.push_back(makeToken(TokenType::RPAREN, ")")); continue; }
         if (c == '[') { advance(); tokens.push_back(makeToken(TokenType::LBRACKET, "[")); continue; }
@@ -137,8 +146,26 @@ std::vector<Token> Lexer::tokenize() {
 
         if (c == '*') { advance(); tokens.push_back(makeToken(TokenType::STAR, "*")); continue; }
         if (c == '/') { advance(); tokens.push_back(makeToken(TokenType::SLASH, "/")); continue; }
-        if (c == '<') { advance(); tokens.push_back(makeToken(TokenType::LT, "<")); continue; }
-        if (c == '>') { advance(); tokens.push_back(makeToken(TokenType::GT, ">")); continue; }
+        
+        if (c == '&') { advance(); tokens.push_back(makeToken(TokenType::BIT_AND, "&")); continue; }
+        if (c == '|') { advance(); tokens.push_back(makeToken(TokenType::BIT_OR, "|")); continue; }
+        if (c == '^') { advance(); tokens.push_back(makeToken(TokenType::XOR, "^")); continue; }
+        
+        if (c == '<') {
+            advance();
+            if (match('<')) tokens.push_back(makeToken(TokenType::LSHIFT, "<<"));
+            else if (match('=')) tokens.push_back(makeToken(TokenType::LT, "<=")); // If you implement LE later
+            else tokens.push_back(makeToken(TokenType::LT, "<"));
+            continue;
+        }
+        
+        if (c == '>') {
+            advance();
+            if (match('>')) tokens.push_back(makeToken(TokenType::RSHIFT, ">>"));
+            else if (match('=')) tokens.push_back(makeToken(TokenType::GT, ">=")); // If you implement GE later
+            else tokens.push_back(makeToken(TokenType::GT, ">"));
+            continue;
+        }
         
         if (c == '=') { 
             advance(); 
@@ -146,18 +173,37 @@ std::vector<Token> Lexer::tokenize() {
             else tokens.push_back(makeToken(TokenType::ASSIGN, "=")); 
             continue; 
         }
+        
         if (c == '+') {
             advance();
             if (match('+')) tokens.push_back(makeToken(TokenType::PLUS_PLUS, "++"));
+            else if (match('=')) tokens.push_back(makeToken(TokenType::PLUS_EQ, "+=")); 
             else tokens.push_back(makeToken(TokenType::PLUS, "+")); 
             continue;
         }
+        
         if (c == '-') {
             advance();
             if (match('>')) tokens.push_back(makeToken(TokenType::ARROW, "->"));
+            else if (match('=')) tokens.push_back(makeToken(TokenType::MINUS_EQ, "-=")); 
             else tokens.push_back(makeToken(TokenType::MINUS, "-")); 
             continue;
         }
+        
+        if (c == '*') { 
+            advance(); 
+            if (match('=')) tokens.push_back(makeToken(TokenType::STAR_EQ, "*="));
+            else tokens.push_back(makeToken(TokenType::STAR, "*")); 
+            continue;
+        }
+        
+        if (c == '/') { 
+            advance(); 
+            if (match('=')) tokens.push_back(makeToken(TokenType::SLASH_EQ, "/=")); 
+            else tokens.push_back(makeToken(TokenType::SLASH, "/")); 
+            continue;
+        }
+        
         throw std::runtime_error("Unknown char: " + std::string(1, c));
     }
     tokens.push_back(makeToken(TokenType::EOF_TOKEN));

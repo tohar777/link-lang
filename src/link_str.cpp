@@ -1,8 +1,17 @@
 // std_string.cpp
 #include "link_str.h"
 #include <algorithm>
+#include <cctype> 
 
 namespace SysString {
+	
+	std::string pop(const std::string& input) {
+        if (input.empty()) return ""; 
+        
+        std::string result = input;
+        result.pop_back(); 
+        return result;
+    }
 
     std::string trim(const std::string& str) {
         const std::string whitespace = " \t\n\r";
@@ -31,7 +40,7 @@ namespace SysString {
             list.push_back(token);
             str.erase(0, pos + delimiter.length());
         }
-        list.push_back(str); // Sisa string terakhir
+        list.push_back(str); 
         return list;
     }
 
@@ -41,6 +50,28 @@ namespace SysString {
             result += list[i];
             if (i < list.size() - 1) result += delimiter;
         }
+        return result;
+    }
+    
+    std::string substring(const std::string& str, int start, int length) {
+        if (start < 0) return "";
+        if (start >= (int)str.length()) return "";
+        
+         If length exceeds string size, cap it
+        return str.substr(start, length);
+    }
+    
+    std::string toLower(const std::string& str) {
+        std::string result = str;
+        std::transform(result.begin(), result.end(), result.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        return result;
+    }
+    
+    std::string toUpper(const std::string& str) {
+        std::string result = str;
+        std::transform(result.begin(), result.end(), result.begin(),
+                       [](unsigned char c){ return std::toupper(c); });
         return result;
     }
 }

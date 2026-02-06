@@ -1,3 +1,11 @@
+#ifdef _WIN32
+#include <conio.h>
+#else
+#include <termios.h> 
+#include <unistd.h>
+#include <stdio.h>
+#endif
+
 #include <iostream>
 #include <variant> 
 #include <string> 
@@ -9,8 +17,8 @@
 #include <sstream>
 #include <thread>
 #include <chrono>
-
-// INCLUDE HEADER
+#include <filesystem>
+#include <random> 
 #include "types.h"  
 #include "env.h"    
 #include "lexer.h" 
@@ -18,377 +26,880 @@
 #include "os.h" 
 #include "link_str.h"
 #include "link_math.h"
+#include "link_net.h"
+#include "runtime.h"
+#include "link_gui.h"
 
-class Runtime {
-public:
-    Runtime() {
-        globalEnv = std::make_shared<Environment>();
-        currentEnv = globalEnv;
+namespace fs= std::filesystem; 
+static std::random_device rd;
+static std::mt19937 gen(rd()); 
+
+Runtime::Runtime() {
+    globalEnv = std::make_shared<Environment>();
+    currentEnv = globalEnv;
+    initNativeFunctions(); 
+}
+
+std::string Runtime::getAnsiColor(const std::string& color) {
+    if (color == "red")     return "\033[31m";
+    if (color == "green")   return "\033[32m";
+    if (color == "yellow")  return "\033[33m";
+    if (color == "blue")    return "\033[34m";
+    if (color == "magenta") return "\033[35m";
+    if (color == "cyan")    return "\033[36m";
+    if (color == "white")   return "\033[37m";
+    return "";
+}
+
+std::string Runtime::objToString(const Obj& val) {
+    if (std::holds_alternative<int>(val.as)) {
+        return std::to_string(std::get<int>(val.as));
     }
+    if (std::holds_alternative<double>(val.as)) {
+        std::string s = std::to_string(std::get<double>(val.as));
+        s.erase(s.find_last_not_of('0') + 1, std::string::npos);
+        if (s.back() == '.') s.pop_back();
+        return s;
+    }
+    if (std::holds_alternative<std::string>(val.as)) {
+        return std::get<std::string>(val.as);
+    }
+    if (std::holds_alternative<bool>(val.as)) {
+        return std::get<bool>(val.as) ? "true" : "false";
+    }
+    return ""; 
+}
+
+char getChar() {
+    #ifdef _WIN32
+        return _getch(); 
+    #else
+        struct termios oldattr, newattr;
+        char ch;
+        tcgetattr(STDIN_FILENO, &oldattr);
+        newattr = oldattr;
+        newattr.c_lflag &= ~(ICANON | ECHO); 
+        tcsetattr(STDIN_FILENO, TCSANOW, &newattr);
+        ch = getchar();
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldattr); 
+        return ch;
+    #endif
+}
+
+void Runtime::initNativeFunctions() {
     
-    void execute(std::unique_ptr<Program> program) {
-        if (!program) return;
+    nativeRegistry["print"] = [this](const std::vector<Obj>& args) -> Obj {
+    for (size_t i = 0; i < args.size(); ++i) {
+        std::string rawOutput = objToString(args[i]);
+        std::cout << Sys::unescape(rawOutput);
         
-        loadedPrograms.push_back(std::move(program));
-        
-        for (auto& stmt : loadedPrograms.back()->statements) { 
-            runStatement(stmt.get()); 
+        if (i < args.size() - 1) std::cout << " ";
+    }
+    std::cout << "\n";
+    return Obj(0);
+};
+    
+    // ==========================================
+    // 1. NETWORKING MODULE (SysNet)
+    // ==========================================
+    nativeRegistry["net.server"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(-1);
+        int port = 80;
+        if (std::holds_alternative<int>(args[0].as)) port = std::get<int>(args[0].as);
+        else if (std::holds_alternative<double>(args[0].as)) port = (int)std::get<double>(args[0].as);
+        int s = SysNet::createSocket();
+        if (s == -1) return Obj(-1);
+        if (SysNet::bindAndListen(s, port)) {
+            std::cout << "[INFO] Server listening on port " << port << "...\n";
+            return Obj(s);
         }
+        return Obj(-1);
+    };
+
+    // 2. Accept Client (Blocking)
+    nativeRegistry["net.accept"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(-1);
+        if (std::holds_alternative<int>(args[0].as)) {
+            int serverSock = std::get<int>(args[0].as);
+            int clientSock = SysNet::acceptClient(serverSock);
+            return Obj(clientSock);
+        }
+        return Obj(-1);
+    };
+
+    // 3. Client Connect
+    nativeRegistry["net.connect"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(-1);
+        std::string ip = "127.0.0.1";
+        int port = 80;
+        if (std::holds_alternative<std::string>(args[0].as)) ip = std::get<std::string>(args[0].as);
+        if (std::holds_alternative<int>(args[1].as)) port = std::get<int>(args[1].as);
+
+        int s = SysNet::createSocket();
+        if (SysNet::connectSocket(s, ip, port)) return Obj(s);
+        return Obj(-1);
+    };
+
+    // 4. Send Data
+    nativeRegistry["net.send"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(false);
+        if (std::holds_alternative<int>(args[0].as)) {
+            return Obj(SysNet::sendData(std::get<int>(args[0].as), objToString(args[1])));
+        }
+        return Obj(false);
+    };
+
+    // 5. Receive Data
+    nativeRegistry["net.recv"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        if (std::holds_alternative<int>(args[0].as)) {
+            return Obj(SysNet::receiveData(std::get<int>(args[0].as)));
+        }
+        return Obj("");
+    };
+
+    // 6. Close
+    nativeRegistry["net.close"] = [](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty() && std::holds_alternative<int>(args[0].as)) {
+            SysNet::closeSocket(std::get<int>(args[0].as));
+        }
+        return Obj(0);
+    };
+
+    // ==========================================
+    // 2. TYPE CASTING & CONVERSION
+    // ==========================================
+    nativeRegistry["int"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(0);
+        const Obj& val = args[0];
+        
+        if (std::holds_alternative<int>(val.as)) return val;
+        if (std::holds_alternative<double>(val.as)) return Obj((int)std::get<double>(val.as));
+        if (std::holds_alternative<bool>(val.as)) return Obj(std::get<bool>(val.as) ? 1 : 0);
+        if (std::holds_alternative<std::string>(val.as)) {
+            try { return Obj(std::stoi(std::get<std::string>(val.as))); } 
+            catch(...) { return Obj(0); }
+        }
+        return Obj(0);
+    };
+    nativeRegistry["char"] = [](const std::vector<Obj>& args) -> Obj {
+    if (args.empty()) return Obj("");
+    int code = 0;
+    if (std::holds_alternative<int>(args[0].as)) code = std::get<int>(args[0].as);
+    else if (std::holds_alternative<double>(args[0].as)) code = (int)std::get<double>(args[0].as);
+    
+    std::string s(1, (char)code);
+    return Obj(s);
+    };
+    nativeRegistry["float"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(0.0);
+        const Obj& val = args[0];
+        if (std::holds_alternative<double>(val.as)) return val;
+        if (std::holds_alternative<int>(val.as)) return Obj((double)std::get<int>(val.as));
+        if (std::holds_alternative<std::string>(val.as)) {
+            try { return Obj(std::stod(std::get<std::string>(val.as))); } 
+            catch(...) { return Obj(0.0); }
+        }
+        return Obj(0.0);
+    };
+    nativeRegistry["str"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        return Obj(objToString(args[0]));
+    };
+    // ==========================================
+    // 3. SYSTEM & IO
+    // ==========================================
+    nativeRegistry["term.getch"] = [](const std::vector<Obj>& args) -> Obj {
+        char c = getChar(); // Pastikan fungsi getChar() terlihat disini
+        return Obj(std::string(1, c));
+    };
+    nativeRegistry["term.color"] = [this](const std::vector<Obj>& args) -> Obj {
+    if (args.empty()) return Obj("");
+    std::string colorName = objToString(args[0]);
+    return Obj(getAnsiColor(colorName)); 
+	};
+    nativeRegistry["term.reset"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj("\033[0m");
+    };
+    nativeRegistry["time.sleep"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(0);
+        int ms = 0;
+        if (std::holds_alternative<int>(args[0].as)) ms = std::get<int>(args[0].as);
+        else if (std::holds_alternative<double>(args[0].as)) ms = (int)std::get<double>(args[0].as);
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        return Obj(0);
+    };
+    nativeRegistry["os.exec"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        return Obj(Sys::exec(objToString(args[0]).c_str())); 
+    };
+    nativeRegistry["os.cwd"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(fs::current_path().string());
+    };
+    nativeRegistry["os.getenv"] = [this](const std::vector<Obj>& args) -> Obj {
+         if (args.empty()) return Obj("");
+         return Obj(Sys::getEnv(objToString(args[0])));
+    };
+	nativeRegistry["os.unescape"] = [this](const std::vector<Obj>& args) -> Obj {
+    if (args.empty()) return Obj("");
+    return Obj(Sys::unescape(objToString(args[0])));
+    };
+    nativeRegistry["os.date"] = [this](const std::vector<Obj>& args) -> Obj {
+        std::time_t t = std::time(nullptr);
+        char buffer[100];
+        std::strftime(buffer, sizeof(buffer), "%H:%M", std::localtime(&t));
+        return Obj(std::string(buffer));
+    };
+    
+    // ==========================================
+    // 4. FILESYSTEM (FS) & IO
+    // ==========================================
+    nativeRegistry["io.read"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        if (std::holds_alternative<std::string>(args[0].as)) {
+            std::string path = std::get<std::string>(args[0].as);
+            if (!Sys::fileExists(path)) return Obj(""); // Atau throw error
+            return Obj(Sys::readFile(path));
+        }
+        return Obj("");
+    };
+    nativeRegistry["io.exists"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(false);
+        if (std::holds_alternative<std::string>(args[0].as)) {
+            return Obj(Sys::fileExists(std::get<std::string>(args[0].as)));
+        }
+        return Obj(false);
+    };
+    nativeRegistry["fs.list"] = [](const std::vector<Obj>& args) -> Obj {
+        std::string path = ".";
+        if (!args.empty() && std::holds_alternative<std::string>(args[0].as)) {
+            path = std::get<std::string>(args[0].as);
+        }
+        auto list = std::make_shared<List>();
+        try {
+            for (const auto& entry : fs::directory_iterator(path)) {
+                list->push_back(Obj(entry.path().filename().string()));
+            }
+        } catch(...) {}
+        return Obj(list);
+    };
+    nativeRegistry["fs.isdir"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(false);
+        if (std::holds_alternative<std::string>(args[0].as)) {
+             try { return Obj(fs::is_directory(std::get<std::string>(args[0].as))); }
+             catch(...) { return Obj(false); }
+        }
+        return Obj(false);
+    };
+    nativeRegistry["fs.mkdir"] = [](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty() && std::holds_alternative<std::string>(args[0].as)) {
+            try { fs::create_directory(std::get<std::string>(args[0].as)); } catch(...) {}
+        }
+        return Obj(0);
+    };
+
+    // ==========================================
+    // 5. STRING LIBRARY
+    // ==========================================
+    nativeRegistry["len"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(0);
+        if (std::holds_alternative<std::string>(args[0].as)) 
+            return Obj((int)std::get<std::string>(args[0].as).length());
+        if (std::holds_alternative<std::shared_ptr<List>>(args[0].as))
+            return Obj((int)std::get<std::shared_ptr<List>>(args[0].as)->size());
+         if (std::holds_alternative<std::shared_ptr<Dict>>(args[0].as))
+            return Obj((int)std::get<std::shared_ptr<Dict>>(args[0].as)->size());
+        return Obj(0);
+    };
+
+    nativeRegistry["str.sub"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 3) return Obj("");
+        if (std::holds_alternative<std::string>(args[0].as) &&
+            std::holds_alternative<int>(args[1].as) &&
+            std::holds_alternative<int>(args[2].as)) {
+            return Obj(SysString::substring(
+                std::get<std::string>(args[0].as), 
+                std::get<int>(args[1].as), 
+                std::get<int>(args[2].as)
+            ));
+        }
+        return Obj("");
+    };
+
+    nativeRegistry["str.lower"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        return Obj(SysString::toLower(objToString(args[0])));
+    };
+    
+    nativeRegistry["str.upper"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        return Obj(SysString::toUpper(objToString(args[0])));
+    };
+
+    nativeRegistry["str.trim"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        if (std::holds_alternative<std::string>(args[0].as)) {
+            return Obj(SysString::trim(std::get<std::string>(args[0].as)));
+        }
+        return Obj("");
+    };
+
+    nativeRegistry["str.replace"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 3) return Obj("");
+        return Obj(SysString::replace(
+            objToString(args[0]), objToString(args[1]), objToString(args[2])
+        ));
+    };
+    
+    nativeRegistry["str.split"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(std::make_shared<List>());
+        auto vec = SysString::split(objToString(args[0]), objToString(args[1]));
+        auto list = std::make_shared<List>();
+        for(const auto& v : vec) list->push_back(Obj(v));
+        return Obj(list);
+    };
+
+    nativeRegistry["str.contains"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(false);
+        return Obj(Sys::contains(objToString(args[0]), objToString(args[1])));
+    };
+    
+    nativeRegistry["str.pop"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj("");
+        std::string input = objToString(args[0]);
+        return Obj(SysString::pop(input));
+    };
+    nativeRegistry["str.starts_with"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(false);
+        std::string full = objToString(args[0]);
+        std::string prefix = objToString(args[1]);
+        return Obj(full.rfind(prefix, 0) == 0);
+    };
+
+    // 3. str.substr("cd Desktop", 3) -> "Desktop" (Potong string)
+    nativeRegistry["str.substr"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj("");
+        std::string str = objToString(args[0]);
+        
+        int start = 0;
+        if (std::holds_alternative<int>(args[1].as)) start = std::get<int>(args[1].as);
+        else if (std::holds_alternative<double>(args[1].as)) start = (int)std::get<double>(args[1].as);
+
+        if (start >= str.length()) return Obj("");
+        return Obj(str.substr(start));
+    };
+    nativeRegistry["str.merge"] = [this](const std::vector<Obj>& args) -> Obj {
+    if (args.size() < 2) return Obj("");
+    if (!std::holds_alternative<std::shared_ptr<List>>(args[0].as)) return Obj("");
+    auto listPtr = std::get<std::shared_ptr<List>>(args[0].as);
+    std::string delimiter = objToString(args[1]);
+    std::vector<std::string> strList;
+    for (const auto& item : *listPtr) {
+        strList.push_back(objToString(item));
     }
 
-private:
-    std::shared_ptr<Environment> globalEnv;
-    std::shared_ptr<Environment> currentEnv;
-    std::unordered_map<std::string, FuncDecl*> functionRegistry;
-    std::vector<std::unique_ptr<Program>> loadedPrograms;
+    return Obj(SysString::merge(strList, delimiter));
+   };
 
-    bool isTruthy(const Obj& val) {
-        if (std::holds_alternative<bool>(val.as)) return std::get<bool>(val.as);
-        if (std::holds_alternative<int>(val.as)) return std::get<int>(val.as) != 0;
-        if (std::holds_alternative<double>(val.as)) return std::get<double>(val.as) != 0.0;
-        if (std::holds_alternative<std::shared_ptr<List>>(val.as)) return !std::get<std::shared_ptr<List>>(val.as)->empty();
-        return false; 
-    }
 
-    FuncDecl* findMethod(LinkClass* klass, const std::string& name) {
-        if (klass->methods.count(name)) {
-            return dynamic_cast<FuncDecl*>(klass->methods[name]);
+    // ==========================================
+    // 6. MATH LIBRARY
+    // ==========================================
+    auto asDouble = [](const Obj& o) -> double {
+        if (std::holds_alternative<double>(o.as)) return std::get<double>(o.as);
+        if (std::holds_alternative<int>(o.as)) return (double)std::get<int>(o.as);
+        return 0.0;
+    };
+
+    nativeRegistry["math.random"] = [](const std::vector<Obj>& args) -> Obj {
+        std::uniform_real_distribution<> dis(0.0, 1.0);
+        return Obj(dis(gen)); 
+    };
+
+    nativeRegistry["math.randint"] = [](const std::vector<Obj>& args) -> Obj {
+        int minV = 0, maxV = 100;
+        if (args.size() >= 1 && std::holds_alternative<int>(args[0].as)) minV = std::get<int>(args[0].as);
+        if (args.size() >= 2 && std::holds_alternative<int>(args[1].as)) maxV = std::get<int>(args[1].as);
+        std::uniform_int_distribution<> dis(minV, maxV);
+        return Obj(dis(gen));
+    };
+
+    nativeRegistry["math.pi"] = [](const std::vector<Obj>& args) -> Obj { return Obj(SysMath::pi()); };
+    
+    nativeRegistry["math.sin"] = [asDouble](const std::vector<Obj>& args) -> Obj { 
+        return args.empty() ? Obj(0.0) : Obj(SysMath::sin(asDouble(args[0]))); 
+    };
+    nativeRegistry["math.cos"] = [asDouble](const std::vector<Obj>& args) -> Obj { 
+        return args.empty() ? Obj(0.0) : Obj(SysMath::cos(asDouble(args[0]))); 
+    };
+    nativeRegistry["math.sqrt"] = [asDouble](const std::vector<Obj>& args) -> Obj { 
+        return args.empty() ? Obj(0.0) : Obj(SysMath::sqrt(asDouble(args[0]))); 
+    };
+    nativeRegistry["math.pow"] = [asDouble](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(0.0);
+        double base = asDouble(args[0]);
+        double exp = asDouble(args[1]);
+        return Obj(std::pow(base, exp));
+    };
+    nativeRegistry["math.abs"] = [asDouble](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(0.0);
+        double val = asDouble(args[0]);
+        return Obj(std::abs(val)); 
+    };
+    
+    // ==========================================
+    // 7. COLLECTIONS (List & Dict)
+    // ==========================================
+    nativeRegistry["list.pop"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj();
+        if (std::holds_alternative<std::shared_ptr<List>>(args[0].as)) {
+            auto list = std::get<std::shared_ptr<List>>(args[0].as);
+            if (!list->empty()) {
+                Obj last = list->back();
+                list->pop_back();
+                return last;
+            }
         }
-        return nullptr;
-    }
+        return Obj();
+    };
+    nativeRegistry["range"] = [](const std::vector<Obj>& args) -> Obj {
+        int limit = 0;
+        if (!args.empty() && std::holds_alternative<int>(args[0].as)) limit = std::get<int>(args[0].as);
+        auto list = std::make_shared<List>();
+        for(int i=0; i<limit; i++) list->push_back(Obj(i));
+        return Obj(list);
+    };
+    nativeRegistry["term.clear"] = [](const std::vector<Obj>& args) -> Obj {
+        std::cout << "\033[2J\033[H";
+        return Obj(0);
+    };
+    nativeRegistry["term.move"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() >= 2) {
+            int r = std::stoi(objToString(args[0]));
+            int c = std::stoi(objToString(args[1]));
+            std::cout << "\033[" << r << ";" << c << "H" << std::flush;
+        }
+        return Obj(0);
+    };
+    nativeRegistry["os.chdir"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty()) {
+            std::string path = objToString(args[0]);
+            try { fs::current_path(path); } 
+            catch (...) { std::cout << "Error: Cannot move to '" << path << "'\n"; }
+        }
+        return Obj(0);
+    };
+    nativeRegistry["os.setenv"] = [this](const std::vector<Obj>& args) -> Obj {
+         if (args.size() >= 2) {
+             Sys::setEnv(objToString(args[0]), objToString(args[1]));
+         }
+         return Obj(0);
+    };
+    nativeRegistry["io.remove"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty()) Sys::removeFile(objToString(args[0]));
+        return Obj(0);
+    };
+    nativeRegistry["io.write"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(0);
+        std::string path = objToString(args[0]);
+        std::string content = objToString(args[1]);
+        if (path == "stdout") std::cout << content << std::flush;
+        else Sys::writeFile(path, content, false);
+        return Obj(0);
+    };
+    nativeRegistry["io.append"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(0);
+        Sys::writeFile(objToString(args[0]), objToString(args[1]), true);
+        return Obj(0);
+    };
+    nativeRegistry["list.add"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.size() >= 2 && std::holds_alternative<std::shared_ptr<List>>(args[0].as)) {
+            std::get<std::shared_ptr<List>>(args[0].as)->push_back(args[1]);
+        }
+        return Obj(0);
+    };
+    // ==========================================
+    // GUI MODULE (Bridge to src/link_gui.cpp)
+    // ==========================================
+    
+    nativeRegistry["gui_get_char"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::getCharPressed());
+    };
+    nativeRegistry["gui_get_key"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::getKeyPressed());
+    };
+    nativeRegistry["gui_is_key_down"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(false);
+        return Obj(SysGui::isKeyDown(objToString(args[0])));
+    };
 
-    Obj evaluateExpr(Expr* expr) {
-        if (!expr) return Obj();
+    nativeRegistry["gui_measure_text"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(0);
+        std::string txt = objToString(args[0]);
+        int size = std::stoi(objToString(args[1]));
+        return Obj(SysGui::measureText(txt, size));
+    };
+
+    nativeRegistry["gui_setup"] = [this](const std::vector<Obj>& args) -> Obj {
+    if (args.size() < 3) return Obj(0);
+    int w = 800; int h = 600;
+    
+    if (std::holds_alternative<int>(args[1].as)) h = std::get<int>(args[1].as);
+    else if (std::holds_alternative<double>(args[1].as)) h = (int)std::get<double>(args[1].as);
+    
+    std::string title = objToString(args[2]);
+    
+    SysGui::setup(w, h, title);
+    return Obj(0);
+    };
+    nativeRegistry["gui_close"] = [](const std::vector<Obj>& args) -> Obj {
+        SysGui::close();
+        return Obj(0);
+    };
+
+    nativeRegistry["gui_running"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::running());
+    };
+
+    nativeRegistry["gui_start"] = [](const std::vector<Obj>& args) -> Obj {
+        SysGui::start();
+        return Obj(0);
+    };
+    
+    nativeRegistry["gui_present"] = [](const std::vector<Obj>& args) -> Obj {
+        SysGui::present();
+        return Obj(0);
+    };
+
+    nativeRegistry["gui_clear"] = [this](const std::vector<Obj>& args) -> Obj {
+    std::string color = "white";
+    if (!args.empty()) color = objToString(args[0]); 
+    SysGui::clear(color);
+    return Obj(0);
+    };
+
+    nativeRegistry["gui_text"] = [this](const std::vector<Obj>& args) -> Obj {
+    if (args.size() < 3) return Obj(0);
+    int x = std::stoi(objToString(args[0]));
+    int y = std::stoi(objToString(args[1]));
+    std::string text = objToString(args[2]);
+    std::string color = "black";
+    int size = 20;
+    
+    if (args.size() >= 4) color = objToString(args[3]);
+    if (args.size() >= 5) size = std::stoi(objToString(args[4]));
+
+    SysGui::drawText(x, y, text, color, size);
+    return Obj(0);
+    };
+    
+    nativeRegistry["gui_rect"] = [this](const std::vector<Obj>& args) -> Obj {
+    if (args.size() < 5) return Obj(0);
+    int x = std::stoi(objToString(args[0]));
+    int y = std::stoi(objToString(args[1]));
+    int w = std::stoi(objToString(args[2]));
+    int h = std::stoi(objToString(args[3]));
+    std::string color = objToString(args[4]);
+    SysGui::drawRect(x, y, w, h, color);
+    return Obj(0);
+    };
+
+	nativeRegistry["gui_is_mouse_down"] = [this](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::isMouseDown());
+    };
+
+    nativeRegistry["gui.mouse_x"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::getMouseX());
+    };
+    nativeRegistry["gui.mouse_y"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::getMouseY());
+    };
+
+    nativeRegistry["gui_click"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::isMousePressed());
+    };
+    
+    nativeRegistry["gui_key"] = [this](const std::vector<Obj>& args) -> Obj { 
+        if (args.empty()) return Obj(false);
+        std::string key = objToString(args[0]);
+        return Obj(SysGui::isKeyDown(key));
+    };
+    nativeRegistry["gui_load_font"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(0);
+        std::string path = objToString(args[0]);
+        int size = std::stoi(objToString(args[1]));
+        SysGui::loadFont(path, size);
+        return Obj(0);
+    };
+    nativeRegistry["gui_is_key_pressed"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) return Obj(false);
+        std::string key = objToString(args[0]);
+        return Obj(SysGui::isKeyPressed(key));
+    };
+    nativeRegistry["gui.measure_height"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(0);
+        std::string text = objToString(args[0]);
         
-        if (auto num = dynamic_cast<NumberExpr*>(expr)) return Obj(num->value);
-        if (auto flt = dynamic_cast<FloatExpr*>(expr)) return Obj(flt->value);
-        if (auto str = dynamic_cast<StringExpr*>(expr)) return Obj(str->value);
-        if (auto chr = dynamic_cast<CharExpr*>(expr)) return Obj(chr->value);
-        if (auto bl = dynamic_cast<BoolExpr*>(expr)) return Obj(bl->value);
-        if (auto var = dynamic_cast<VariableExpr*>(expr)) return currentEnv->get(var->name);
+        int size = 20; 
+        if (std::holds_alternative<int>(args[1].as)) size = std::get<int>(args[1].as);
+        
+        return Obj(SysGui::measureTextHeight(text, size));
+    };
+    nativeRegistry["gui.get_mouse_wheel"] = [this](const std::vector<Obj>& args) -> Obj {
+        return Obj((double)SysGui::getMouseWheel());
+    };
 
-        if (auto arr = dynamic_cast<ArrayExpr*>(expr)) {
-            auto list = std::make_shared<List>();
-            for (auto& el : arr->elements) list->push_back(evaluateExpr(el.get()));
-            return Obj(list);
+    nativeRegistry["gui_load_image"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 2) return Obj(false);
+        std::string path = objToString(args[0]);
+        std::string name = objToString(args[1]);
+        
+        SysGui::loadImage(path, name);
+        return Obj(true);
+    };
+
+    nativeRegistry["gui_draw_image"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 5) return Obj(false);
+        std::string name = objToString(args[0]);
+        int x = std::get<int>(args[1].as);
+        int y = std::get<int>(args[2].as);
+        int w = std::get<int>(args[3].as);
+        int h = std::get<int>(args[4].as);
+        
+        SysGui::drawImage(name, x, y, w, h);
+        return Obj(true);
+    };
+    nativeRegistry["gui.width"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::getScreenWidth());
+    };
+    nativeRegistry["gui.height"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::getScreenHeight());
+    };
+    nativeRegistry["gui_quit"] = [](const std::vector<Obj>& args) -> Obj {
+    SysGui::stop();
+    return Obj(true);
+    };
+}
+
+bool Runtime::isTruthy(const Obj& o) {
+    if (std::holds_alternative<bool>(o.as)) return std::get<bool>(o.as);
+    if (std::holds_alternative<int>(o.as)) return std::get<int>(o.as) != 0;
+    if (std::holds_alternative<double>(o.as)) return std::get<double>(o.as) != 0.0;
+    if (std::holds_alternative<std::string>(o.as)) return !std::get<std::string>(o.as).empty();
+    return !std::holds_alternative<std::monostate>(o.as);
+}
+
+FuncDecl* Runtime::findMethod(LinkClass* klass, const std::string& name) {
+    if (klass->methods.count(name)) {
+        return dynamic_cast<FuncDecl*>(klass->methods[name]);
+    }
+    return nullptr;
+}
+
+void Runtime::printObj(const Obj& val) {
+    std::cout << objToString(val);
+}
+Obj Runtime::evaluateExpr(Expr* expr) {
+    if (!expr) return Obj();
+
+    // =========================================================
+    // 1. LITERALS & VARIABLES (Tetap Sama)
+    // =========================================================
+    if (auto num = dynamic_cast<NumberExpr*>(expr)) return Obj(num->value);
+    if (auto flt = dynamic_cast<FloatExpr*>(expr)) return Obj(flt->value);
+    if (auto str = dynamic_cast<StringExpr*>(expr)) return Obj(str->value);
+    if (auto chr = dynamic_cast<CharExpr*>(expr)) return Obj(chr->value);
+    if (auto bl = dynamic_cast<BoolExpr*>(expr)) return Obj(bl->value);
+    if (auto var = dynamic_cast<VariableExpr*>(expr)) return currentEnv->get(var->name);
+
+    // =========================================================
+    // 2. DATA STRUCTURES (Tetap Sama)
+    // =========================================================
+    if (auto arr = dynamic_cast<ArrayExpr*>(expr)) {
+        auto list = std::make_shared<List>();
+        for (auto& el : arr->elements) list->push_back(evaluateExpr(el.get()));
+        return Obj(list);
+    }
+    if (auto dictNode = dynamic_cast<DictExpr*>(expr)) {
+        auto dict = std::make_shared<Dict>();
+        for (auto& p : dictNode->pairs) {
+            Obj key = evaluateExpr(p.first.get());
+            Obj val = evaluateExpr(p.second.get());
+            if (std::holds_alternative<std::string>(key.as)) (*dict)[std::get<std::string>(key.as)] = val;
+            else std::cout << "Runtime Error: Dict key must be string.\n";
         }
-        if (auto dictNode = dynamic_cast<DictExpr*>(expr)) {
-            auto dict = std::make_shared<Dict>();
-            for (auto& p : dictNode->pairs) {
-                Obj key = evaluateExpr(p.first.get());
-                Obj val = evaluateExpr(p.second.get());
-                if (std::holds_alternative<std::string>(key.as)) (*dict)[std::get<std::string>(key.as)] = val;
-                else std::cout << "Runtime Error: Dict key must be string.\n";
-            }
-            return Obj(dict);
+        return Obj(dict);
+    }
+
+    // =========================================================
+    // 3. INDEX ACCESS (Tetap Sama)
+    // =========================================================
+    if (auto idx = dynamic_cast<IndexExpr*>(expr)) {
+        Obj object = evaluateExpr(idx->object.get());
+        Obj index = evaluateExpr(idx->index.get());
+        if (std::holds_alternative<std::shared_ptr<List>>(object.as) && std::holds_alternative<int>(index.as)) {
+            auto list = std::get<std::shared_ptr<List>>(object.as);
+            int i = std::get<int>(index.as);
+            if (i < 0) i += list->size(); 
+            if (i >= 0 && i < (int)list->size()) return (*list)[i];
+        } else if (std::holds_alternative<std::shared_ptr<Dict>>(object.as) && std::holds_alternative<std::string>(index.as)) {
+            auto dict = std::get<std::shared_ptr<Dict>>(object.as);
+            std::string key = std::get<std::string>(index.as);
+            if (dict->count(key)) return (*dict)[key];
         }
+        return Obj();
+    }
 
-        if (auto idx = dynamic_cast<IndexExpr*>(expr)) {
-            Obj object = evaluateExpr(idx->object.get());
-            Obj index = evaluateExpr(idx->index.get());
-            if (std::holds_alternative<std::shared_ptr<List>>(object.as) && std::holds_alternative<int>(index.as)) {
-                auto list = std::get<std::shared_ptr<List>>(object.as);
-                int i = std::get<int>(index.as);
-                if (i < 0) i += list->size(); 
-                if (i >= 0 && i < (int)list->size()) return (*list)[i];
-                std::cout << "Runtime Error: Index out of bounds\n";
-            } else if (std::holds_alternative<std::shared_ptr<Dict>>(object.as) && std::holds_alternative<std::string>(index.as)) {
-                auto dict = std::get<std::shared_ptr<Dict>>(object.as);
-                std::string key = std::get<std::string>(index.as);
-                if (dict->count(key)) return (*dict)[key];
-                return Obj();
-            }
-            return Obj();
-        }
+    // =========================================================
+    // 4. OOP LOGIC (Copy Paste logika OOP Anda yang lama disini)
+    // =========================================================
+    if (auto newExpr = dynamic_cast<NewExpr*>(expr)) {
+        Obj classObj = currentEnv->get(newExpr->className);
+        if (!std::holds_alternative<std::shared_ptr<LinkClass>>(classObj.as)) return Obj();
 
-        if (auto newExpr = dynamic_cast<NewExpr*>(expr)) {
-            Obj classObj = currentEnv->get(newExpr->className);
-            if (!std::holds_alternative<std::shared_ptr<LinkClass>>(classObj.as)) {
-                std::cout << "Runtime Error: '" << newExpr->className << "' is not a class.\n";
-                return Obj();
-            }
+        auto klass = std::get<std::shared_ptr<LinkClass>>(classObj.as);
+        auto instance = std::make_shared<LinkInstance>();
+        instance->klass = klass;
 
-            auto klass = std::get<std::shared_ptr<LinkClass>>(classObj.as);
-            auto instance = std::make_shared<LinkInstance>();
-            instance->klass = klass;
-
-            FuncDecl* init = findMethod(klass.get(), "init");
-            if (init) {
-                std::vector<Obj> args;
-                for (auto& arg : newExpr->args) args.push_back(evaluateExpr(arg.get()));
-
-                auto prevEnv = currentEnv;
-                currentEnv = std::make_shared<Environment>(globalEnv.get());
-                
-                currentEnv->define("this", Obj(instance));
-                for (size_t i = 0; i < init->params.size(); ++i) {
-                     if (i < args.size()) currentEnv->define(init->params[i], args[i]);
-                }
-
-                try {
-                    for (auto& s : init->body) runStatement(s.get());
-                } catch (const ReturnException&) {} // Init tidak mengembalikan nilai
-                
-                currentEnv = prevEnv;
-            }
-            return Obj(instance);
-        }
-
-        if (dynamic_cast<ThisExpr*>(expr)) {
-            return currentEnv->get("this");
-        }
-        if (auto get = dynamic_cast<GetExpr*>(expr)) {
-            Obj obj = evaluateExpr(get->object.get());
-            if (std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) {
-                auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
-                if (instance->fields.count(get->name)) {
-                    return instance->fields[get->name];
-                }
-                return Obj(); 
-            }
-            return Obj();
-        }
-
-        if (auto set = dynamic_cast<SetExpr*>(expr)) {
-            Obj obj = evaluateExpr(set->object.get());
-            if (std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) {
-                auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
-                Obj val = evaluateExpr(set->value.get());
-                instance->fields[set->name] = val; 
-                return val;
-            }
-            std::cout << "Runtime Error: Only instances have fields.\n";
-            return Obj();
-        }
-
-        if (auto methodCall = dynamic_cast<MethodCallExpr*>(expr)) {
-            Obj obj = evaluateExpr(methodCall->object.get());
-            if (!std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) {
-                std::cout << "Runtime Error: Method call on non-instance.\n";
-                return Obj();
-            }
-
-            auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
-            FuncDecl* method = findMethod(instance->klass.get(), methodCall->method);
-            
-            if (!method) {
-                std::cout << "Runtime Error: Method '" << methodCall->method << "' not found.\n";
-                return Obj();
-            }
-
+        FuncDecl* init = findMethod(klass.get(), "init");
+        if (init) {
             std::vector<Obj> args;
-            for (auto& arg : methodCall->args) args.push_back(evaluateExpr(arg.get()));
+            for (auto& arg : newExpr->args) args.push_back(evaluateExpr(arg.get()));
 
             auto prevEnv = currentEnv;
             currentEnv = std::make_shared<Environment>(globalEnv.get());
-
             currentEnv->define("this", Obj(instance));
-            for (size_t i = 0; i < method->params.size(); ++i) {
-                if (i < args.size()) currentEnv->define(method->params[i], args[i]);
+            for (size_t i = 0; i < init->params.size(); ++i) {
+                 if (i < args.size()) currentEnv->define(init->params[i], args[i]);
+            }
+            try {
+                for (auto& s : init->body) runStatement(s.get());
+            } catch (const ReturnException&) {}
+            currentEnv = prevEnv;
+        }
+        return Obj(instance);
+    }
+    
+    if (dynamic_cast<ThisExpr*>(expr)) return currentEnv->get("this");
+    
+    if (auto get = dynamic_cast<GetExpr*>(expr)) {
+        Obj obj = evaluateExpr(get->object.get());
+        if (std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) {
+            auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
+            if (instance->fields.count(get->name)) return instance->fields[get->name];
+        }
+        return Obj();
+    }
+    
+    if (auto set = dynamic_cast<SetExpr*>(expr)) {
+        Obj obj = evaluateExpr(set->object.get());
+        if (std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) {
+             auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
+             Obj val = evaluateExpr(set->value.get());
+             instance->fields[set->name] = val;
+             return val;
+        }
+        return Obj();
+    }
+
+    if (auto methodCall = dynamic_cast<MethodCallExpr*>(expr)) {
+         Obj obj = evaluateExpr(methodCall->object.get());
+         if (!std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) return Obj();
+         auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
+         FuncDecl* method = findMethod(instance->klass.get(), methodCall->method);
+         if (!method) return Obj();
+
+         std::vector<Obj> args;
+         for (auto& arg : methodCall->args) args.push_back(evaluateExpr(arg.get()));
+         
+         auto prevEnv = currentEnv;
+         currentEnv = std::make_shared<Environment>(globalEnv.get());
+         currentEnv->define("this", Obj(instance));
+         for (size_t i = 0; i < method->params.size(); ++i) {
+             if (i < args.size()) currentEnv->define(method->params[i], args[i]);
+         }
+         try { for (auto& s : method->body) runStatement(s.get()); } 
+         catch (const ReturnException& e) { currentEnv = prevEnv; return e.value; }
+         currentEnv = prevEnv;
+         return Obj();
+    }
+
+    // =========================================================
+    // 5. FUNCTION CALLS (INI YANG BERUBAH TOTAL!)
+    // =========================================================
+    if (auto call = dynamic_cast<CallExpr*>(expr)) {
+        std::vector<Obj> args;
+        for (auto& arg : call->args) {
+            args.push_back(evaluateExpr(arg.get()));
+        }
+        if (nativeRegistry.find(call->func) != nativeRegistry.end()) {
+            return nativeRegistry[call->func](args);
+        }
+        if (functionRegistry.count(call->func)) {
+            FuncDecl* fn = functionRegistry[call->func];
+            if (args.size() != fn->params.size()) {
+                std::cout << "Runtime Error: Function " << fn->name << " arg mismatch.\n";
+                return Obj();
+            }
+
+            auto previousEnv = currentEnv;
+            currentEnv = std::make_shared<Environment>(globalEnv.get());
+            for (size_t i = 0; i < fn->params.size(); ++i) {
+                currentEnv->define(fn->params[i], args[i]);
             }
 
             try {
-                for (auto& s : method->body) runStatement(s.get());
+                for (auto& s : fn->body) runStatement(s.get());
             } catch (const ReturnException& e) {
-                currentEnv = prevEnv;
+                currentEnv = previousEnv; 
                 return e.value;
             }
 
-            currentEnv = prevEnv;
+            currentEnv = previousEnv;
             return Obj();
         }
+        std::cout << "Runtime Error: Unknown function '" << call->func << "'\n";
+        return Obj();
+    }
 
-        if (auto call = dynamic_cast<CallExpr*>(expr)) {
-			
-			if (call->func == "time.sleep") {
-                if (call->args.empty()) return Obj();
-
-                Obj val = evaluateExpr(call->args[0].get());
-                int ms = 0;
-                
-                if (std::holds_alternative<int>(val.as)) ms = std::get<int>(val.as);
-                else if (std::holds_alternative<double>(val.as)) ms = (int)std::get<double>(val.as);
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-                return Obj();
-            }
-
-            if (call->func == "range") {
-                if (call->args.empty()) return Obj();
-                Obj limitObj = evaluateExpr(call->args[0].get());
-                int limit = 0;
-                if (std::holds_alternative<int>(limitObj.as)) limit = std::get<int>(limitObj.as);
-                auto list = std::make_shared<List>();
-                for (int i = 0; i < limit; i++) list->push_back(Obj(i));
-                return Obj(list);
-            }
-            if (call->func == "len" || call->func == "str.len") {
-                if (call->args.empty()) return Obj(0);
-                Obj target = evaluateExpr(call->args[0].get());
-                if (std::holds_alternative<std::string>(target.as)) return Obj((int)std::get<std::string>(target.as).length());
-                if (std::holds_alternative<std::shared_ptr<List>>(target.as)) return Obj((int)std::get<std::shared_ptr<List>>(target.as)->size());
-                return Obj(0);
-            }
-            if (call->func == "io.read") {
-                if (call->args.empty()) return Obj("");
-                Obj pathObj = evaluateExpr(call->args[0].get()); 
-                if (std::holds_alternative<std::string>(pathObj.as)) {
-                    std::string path = std::get<std::string>(pathObj.as);
-                    if (!Sys::fileExists(path)) throw RuntimeException("File not found: " + path);
-                    return Obj(Sys::readFile(path));
-                }
-                return Obj("");
-            }
-            if (call->func == "io.exists") {
-                if (call->args.empty()) return Obj(false);
-                Obj path = evaluateExpr(call->args[0].get());
-                if (std::holds_alternative<std::string>(path.as)) return Obj(Sys::fileExists(std::get<std::string>(path.as)));
-                return Obj(false);
-            }
-            if (call->func == "os.exec") {
-                if (call->args.empty()) return Obj("");
-                Obj cmd = evaluateExpr(call->args[0].get());
-                if (std::holds_alternative<std::string>(cmd.as)) return Obj(Sys::exec(std::get<std::string>(cmd.as).c_str()));
-                return Obj("");
-            }
-            if (call->func == "os.getenv") {
-                if (call->args.empty()) return Obj(""); 
-                Obj key = evaluateExpr(call->args[0].get());
-                if (std::holds_alternative<std::string>(key.as)) return Obj(Sys::getEnv(std::get<std::string>(key.as))); 
-                return Obj(""); 
-            }
-
-            if (call->func == "str.trim") {
-                if (call->args.empty()) return Obj("");
-                Obj s = evaluateExpr(call->args[0].get());
-                if (std::holds_alternative<std::string>(s.as)) return Obj(SysString::trim(std::get<std::string>(s.as)));
-                return s;
-            }
-            if (call->func == "str.replace") {
-                if (call->args.size() < 3) return Obj("");
-                Obj s = evaluateExpr(call->args[0].get());
-                Obj t = evaluateExpr(call->args[1].get());
-                Obj r = evaluateExpr(call->args[2].get());
-                if (std::holds_alternative<std::string>(s.as) && std::holds_alternative<std::string>(t.as) && std::holds_alternative<std::string>(r.as))
-                    return Obj(SysString::replace(std::get<std::string>(s.as), std::get<std::string>(t.as), std::get<std::string>(r.as)));
-                return s;
-            }
-            if (call->func == "str.split") {
-                 if (call->args.size() < 2) return Obj(std::make_shared<List>());
-                 Obj s = evaluateExpr(call->args[0].get());
-                 Obj d = evaluateExpr(call->args[1].get());
-                 auto list = std::make_shared<List>();
-                 if (std::holds_alternative<std::string>(s.as) && std::holds_alternative<std::string>(d.as)) {
-                     auto vec = SysString::split(std::get<std::string>(s.as), std::get<std::string>(d.as));
-                     for(const auto& v : vec) list->push_back(Obj(v));
-                 }
-                 return Obj(list);
-            }
-            if (call->func == "str.merge") {
-                if (call->args.size() < 2) return Obj("");
-                Obj l = evaluateExpr(call->args[0].get());
-                Obj d = evaluateExpr(call->args[1].get());
-                if (std::holds_alternative<std::shared_ptr<List>>(l.as) && std::holds_alternative<std::string>(d.as)) {
-                    std::vector<std::string> vs;
-                    auto lst = std::get<std::shared_ptr<List>>(l.as);
-                    for(auto& i : *lst) {
-                        if(std::holds_alternative<std::string>(i.as)) vs.push_back(std::get<std::string>(i.as));
-                        else if(std::holds_alternative<int>(i.as)) vs.push_back(std::to_string(std::get<int>(i.as)));
-                        else if(std::holds_alternative<double>(i.as)) vs.push_back(std::to_string(std::get<double>(i.as)));
-                    }
-                    return Obj(SysString::merge(vs, std::get<std::string>(d.as)));
-                }
-                return Obj("");
-            }
-            if (call->func == "str.contains") {
-                if (call->args.size() < 2) return Obj(false);
-                Obj h = evaluateExpr(call->args[0].get());
-                Obj n = evaluateExpr(call->args[1].get());
-                if (std::holds_alternative<std::string>(h.as) && std::holds_alternative<std::string>(n.as)) 
-                    return Obj(Sys::contains(std::get<std::string>(h.as), std::get<std::string>(n.as)));
-                return Obj(false);
-            }
-
-            auto getDouble = [&](Expr* e) -> double {
-                Obj o = evaluateExpr(e);
-                if (std::holds_alternative<double>(o.as)) return std::get<double>(o.as);
-                if (std::holds_alternative<int>(o.as)) return (double)std::get<int>(o.as);
-                return 0.0;
-            };
-
-            if (call->func == "math.pi") return Obj(SysMath::pi());
-            if (call->func == "math.sin") return Obj(SysMath::sin(getDouble(call->args[0].get())));
-            if (call->func == "math.cos") return Obj(SysMath::cos(getDouble(call->args[0].get())));
-            if (call->func == "math.tan") return Obj(SysMath::tan(getDouble(call->args[0].get())));
-            if (call->func == "math.sqrt") return Obj(SysMath::sqrt(getDouble(call->args[0].get())));
-            if (call->func == "math.abs") return Obj(SysMath::abs(getDouble(call->args[0].get())));
-            if (call->func == "math.pow") {
-                 if (call->args.size() >= 2) return Obj(SysMath::pow(getDouble(call->args[0].get()), getDouble(call->args[1].get())));
-                 return Obj(0.0);
-            }
-
-            if (functionRegistry.count(call->func)) {
-                FuncDecl* fn = functionRegistry[call->func];
-                if (call->args.size() != fn->params.size()) {
-                    std::cout << "Runtime Error: Function " << fn->name << " mismatch args.\n";
-                    return Obj();
-                }
-
-                std::vector<Obj> argValues;
-                for (auto& arg : call->args) argValues.push_back(evaluateExpr(arg.get()));
-
-                auto previousEnv = currentEnv;
-                currentEnv = std::make_shared<Environment>(globalEnv.get());
-
-                for (size_t i = 0; i < fn->params.size(); ++i) {
-                    currentEnv->define(fn->params[i], argValues[i]);
-                }
-
-                try {
-                    for (auto& s : fn->body) runStatement(s.get());
-                } catch (const ReturnException& e) {
-                    currentEnv = previousEnv; 
-                    return e.value;
-                }
-
-                currentEnv = previousEnv;
-                return Obj();
-            }
-
-            return Obj(); 
-        }
-
-        if (auto inp = dynamic_cast<InputExpr*>(expr)) {
-            if (!inp->prompt.empty()) std::cout << inp->prompt; 
-            std::string line;
-            if (!std::getline(std::cin, line)) return Obj();
-            try {
-                if (line.find('.') != std::string::npos) return Obj(std::stod(line)); 
-                return Obj(std::stoi(line)); 
-            } catch(...) { return Obj(line); } 
-        }
-
-        if (auto bin = dynamic_cast<BinaryExpr*>(expr)) {
+    // =========================================================
+    // 6. BINARY OPERATIONS (Tetap Sama, Copy Paste yang Lama)
+    // =========================================================
+            if (auto bin = dynamic_cast<BinaryExpr*>(expr)) {
             Obj left = evaluateExpr(bin->lhs.get());   
             Obj right = evaluateExpr(bin->rhs.get());  
             
+            if (std::holds_alternative<int>(left.as) && std::holds_alternative<int>(right.as)) {
+                int l = std::get<int>(left.as);
+                int r = std::get<int>(right.as);
+                
+                switch (bin->op) {
+                    case '&': return Obj(l & r);
+                    case '|': return Obj(l | r);
+                    case '^': return Obj(l ^ r);
+                    case 'L': return Obj(l << r); // Left Shift
+                    case 'R': return Obj(l >> r); // Right Shift
+                }
+            }
+            
+            if (bin->op == '&' || bin->op == '|') {
+            bool l = isTruthy(left);
+            bool r = isTruthy(right);
+            if (bin->op == '&') return Obj(l && r);
+            if (bin->op == '|') return Obj(l || r);
+        }
+            
             if (std::holds_alternative<std::string>(left.as)) {
                 std::string sLeft = std::get<std::string>(left.as);
-                std::string sRight = "";
-                if (std::holds_alternative<std::string>(right.as)) sRight = std::get<std::string>(right.as);
-                else if (std::holds_alternative<int>(right.as)) sRight = std::to_string(std::get<int>(right.as));
-                else if (std::holds_alternative<double>(right.as)) {
-                    std::ostringstream oss;
-                    oss << std::get<double>(right.as);
-                    sRight = oss.str();
-                }
+                std::string sRight = objToString(right); 
+                
                 if (bin->op == '+') return Obj(sLeft + sRight);
             }
 
             if (std::holds_alternative<int>(left.as) && std::holds_alternative<int>(right.as)) {
                 int l = std::get<int>(left.as), r = std::get<int>(right.as);
                 switch (bin->op) {
-                    case '+': return Obj(l + r); case '-': return Obj(l - r);
+                    case '+': return Obj(l + r); case '-': return Obj(l - r); case '!': return Obj(l != r); 
                     case '*': return Obj(l * r); case '/': return Obj((r != 0) ? l / r : 0);
                     case '<': return Obj(l < r); case '>': return Obj(l > r); case '=': return Obj(l == r);
                 }
@@ -396,45 +907,122 @@ private:
                 double l = std::holds_alternative<int>(left.as)?std::get<int>(left.as):std::get<double>(left.as);
                 double r = std::holds_alternative<int>(right.as)?std::get<int>(right.as):std::get<double>(right.as);
                 switch (bin->op) {
-                    case '+': return Obj(l + r); case '-': return Obj(l - r);
+                    case '+': return Obj(l + r); case '-': return Obj(l - r); case '!': return Obj(l != r); 
                     case '*': return Obj(l * r); case '/': return Obj((r != 0.0) ? l / r : 0.0);
                     case '<': return Obj(l < r); case '>': return Obj(l > r); case '=': return Obj(l == r);
                 }
             } else if (std::holds_alternative<std::string>(left.as) && std::holds_alternative<std::string>(right.as)) {
                 if (bin->op == '=') return Obj(std::get<std::string>(left.as) == std::get<std::string>(right.as));
+                if (bin->op == '!') return Obj(std::get<std::string>(left.as) != std::get<std::string>(right.as));
             }
         }
-        return Obj();
+
+    return Obj();
+}
+
+// --- 4. RUN STATEMENT ---
+void Runtime::runStatement(Stmt* stmt) {
+    if (!stmt) return;
+
+    // 1. EXPRESSION & VARIABLE
+    if (auto exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
+        evaluateExpr(exprStmt->expression.get());
+        return;
+    }
+    if (auto set = dynamic_cast<SetStmt*>(stmt)) {
+        currentEnv->define(set->name, evaluateExpr(set->expression.get()));
+        return;
+    }
+    
+    // 2. ARRAY INDEX SET (list[0] = 1)
+    if (auto setIdx = dynamic_cast<SetIndexStmt*>(stmt)) {
+        Obj listObj = evaluateExpr(setIdx->list.get());
+        Obj indexObj = evaluateExpr(setIdx->index.get());
+        Obj val = evaluateExpr(setIdx->value.get());
+
+        if (std::holds_alternative<std::shared_ptr<List>>(listObj.as) && 
+            std::holds_alternative<int>(indexObj.as)) {
+            auto list = std::get<std::shared_ptr<List>>(listObj.as);
+            int idx = std::get<int>(indexObj.as);
+            if (idx < 0) idx += list->size();
+            if (idx >= 0 && idx < (int)list->size()) (*list)[idx] = val;
+            else std::cout << "Runtime Error: Index out of bounds\n";
+        }
+        return;
     }
 
-    void runStatement(Stmt* stmt) {
-        if (!stmt) return;
-        
-        if (dynamic_cast<ClearStmt*>(stmt)) {
-            #ifdef _WIN32 
-            system("cls"); 
-            #else 
-            system("clear"); 
-            #endif
-            return; 
+    // 3. CALL STATEMENT 
+    if (auto call = dynamic_cast<CallStmt*>(stmt)) {
+        std::vector<Obj> args;
+        for (auto& arg : call->args) args.push_back(evaluateExpr(arg.get()));
+
+       
+        if (nativeRegistry.count(call->func)) {
+            nativeRegistry[call->func](args);
+            return;
         }
 
-        if (auto cls = dynamic_cast<ClassDecl*>(stmt)) {
-            auto klass = std::make_shared<LinkClass>();
-            klass->name = cls->name;
-            for (auto& method : cls->methods) {
-                klass->methods[method->name] = method.get();
+        if (functionRegistry.count(call->func)) {
+            FuncDecl* fn = functionRegistry[call->func];
+            if (args.size() != fn->params.size()) {
+                std::cout << "Runtime Error: Arg mismatch.\n"; return;
             }
-            currentEnv->define(cls->name, Obj(klass));
+            auto prevEnv = currentEnv;
+            currentEnv = std::make_shared<Environment>(globalEnv.get());
+            for (size_t i = 0; i < fn->params.size(); ++i) currentEnv->define(fn->params[i], args[i]);
+            try { for (auto& s : fn->body) runStatement(s.get()); } 
+            catch (const ReturnException&) {}
+            currentEnv = prevEnv;
             return;
         }
+        return;
+    }
 
-        if (auto exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
-            evaluateExpr(exprStmt->expression.get());
+    // 4. CONTROL FLOW (If, While, For, Try-Catch)
+    if (auto ifStmt = dynamic_cast<IfStmt*>(stmt)) {
+            if (isTruthy(evaluateExpr(ifStmt->condition.get()))) {
+                for (auto& s : ifStmt->thenBranch) runStatement(s.get());
+            } else {
+                for (auto& s : ifStmt->elseBranch) runStatement(s.get());
+            }
             return;
         }
+    if (auto whileLoop = dynamic_cast<WhileStmt*>(stmt)) {
+            while (isTruthy(evaluateExpr(whileLoop->condition.get()))) {
+                try {
+                    for (auto& s : whileLoop->body) runStatement(s.get());
+                } 
+                catch (const BreakException&) {
+                    break; // Stop while loop C++
+                }
+                catch (const ContinueException&) {
+                    continue; 
+                }
+            }
+            return;
+        }
+    if (auto loop = dynamic_cast<ForStmt*>(stmt)) {
+             Obj collection = evaluateExpr(loop->collection.get());
+             if (std::holds_alternative<std::shared_ptr<List>>(collection.as)) {
+                 auto list = std::get<std::shared_ptr<List>>(collection.as);
+                 currentEnv->define(loop->iteratorName, Obj(0)); 
 
-        if (auto tryStmt = dynamic_cast<TryStmt*>(stmt)) {
+                 for (auto& item : *list) {
+                     currentEnv->assign(loop->iteratorName, item);
+                     try {
+                         for (auto& s : loop->body) runStatement(s.get());
+                     }
+                     catch (const BreakException&) {
+                         break; 
+                     }
+                     catch (const ContinueException&) {
+                         continue; 
+                     }
+                 }
+             }
+             return;
+        }
+    if (auto tryStmt = dynamic_cast<TryStmt*>(stmt)) {
             try {
                 for (auto& s : tryStmt->tryBody) runStatement(s.get());
             } catch (const RuntimeException& e) {
@@ -446,184 +1034,68 @@ private:
             }
             return;
         }
-        
-        if (auto ret = dynamic_cast<ReturnStmt*>(stmt)) {
+    if (auto ret = dynamic_cast<ReturnStmt*>(stmt)) {
 			Obj result; 
 			if (ret->value) result = evaluateExpr(ret->value.get()); 
 			throw ReturnException(result); 
 		}
-        
-        if (auto set = dynamic_cast<SetStmt*>(stmt)) {
-            currentEnv->define(set->name, evaluateExpr(set->expression.get())); 
-            return;
+	if (dynamic_cast<BreakStmt*>(stmt)) {
+            throw BreakException(); 
+        }
+    if (dynamic_cast<ContinueStmt*>(stmt)) {
+            throw ContinueException(); 
         }
 
-        if (auto func = dynamic_cast<FuncDecl*>(stmt)) {
-            functionRegistry[func->name] = func;
-            return;
-        }
-        
-        
-        if (auto call = dynamic_cast<CallStmt*>(stmt)) {
-			
-			if (call->func == "time.sleep") {
-                if (!call->args.empty()) {
-                    Obj val = evaluateExpr(call->args[0].get());
-                    int ms = 0;
-                    if (std::holds_alternative<int>(val.as)) ms = std::get<int>(val.as);
-                    else if (std::holds_alternative<double>(val.as)) ms = (int)std::get<double>(val.as);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-                }
-                return; 
-            }
-			
-            if (call->func == "io.write" || call->func == "io.append") { 
-                if (call->args.size() < 2) return;
-                Obj pathObj = evaluateExpr(call->args[0].get());
-                Obj contentObj = evaluateExpr(call->args[1].get());
-                if (std::holds_alternative<std::string>(pathObj.as)) {
-                    std::string path = std::get<std::string>(pathObj.as);
-                    std::string content = "";
-                    if (std::holds_alternative<std::string>(contentObj.as)) content = std::get<std::string>(contentObj.as);
-                    else if (std::holds_alternative<int>(contentObj.as)) content = std::to_string(std::get<int>(contentObj.as));
-                    else if (std::holds_alternative<double>(contentObj.as)) content = std::to_string(std::get<double>(contentObj.as));
-                    Sys::writeFile(path, content, (call->func == "io.append"));
-                }
-                return; 
-            }
-            if (call->func == "os.setenv") { 
-                if (call->args.size() < 2) return;
-                Obj key = evaluateExpr(call->args[0].get());
-                Obj val = evaluateExpr(call->args[1].get()); 
-                if (std::holds_alternative<std::string>(key.as) && std::holds_alternative<std::string>(val.as)) {
-                    Sys::setEnv(std::get<std::string>(key.as), std::get<std::string>(val.as)); 
-                }
-                return;
-            }
-            if (call->func == "io.remove") { 
-                if (call->args.empty()) return;
-                Obj pathObj = evaluateExpr(call->args[0].get());
-                if (std::holds_alternative<std::string>(pathObj.as)) Sys::removeFile(std::get<std::string>(pathObj.as));
-                return;
-            }
-            if (call->func == "list.add") { 
-                if (call->args.size() < 2) return;
-                Obj target = evaluateExpr(call->args[0].get());
-                Obj item = evaluateExpr(call->args[1].get());
-                if (std::holds_alternative<std::shared_ptr<List>>(target.as)) {
-                    std::get<std::shared_ptr<List>>(target.as)->push_back(item);
-                }
-                return;
-            }
-            if (call->func == "print") { 
-                if (!call->args.empty()) printObj(evaluateExpr(call->args[0].get())); 
-                std::cout << "\n";
-                return;
-            }
-            if (call->func == "os.exec") { 
-                if (!call->args.empty()) {
-                    Obj cmd = evaluateExpr(call->args[0].get());
-                    if (std::holds_alternative<std::string>(cmd.as)) system(std::get<std::string>(cmd.as).c_str());
-                }
-                return;
-            }
-            
-            if (functionRegistry.count(call->func)) { 
-                FuncDecl* fn = functionRegistry[call->func];
-                if (call->args.size() != fn->params.size()) {
-                    std::cout << "Runtime Error: Function " << fn->name << " mismatch args.\n";
-                    return; 
-                } 
-
-                std::vector<Obj> argValues;
-                for (auto& arg : call->args) argValues.push_back(evaluateExpr(arg.get()));
-       
-                auto previousEnv = currentEnv;
-                currentEnv = std::make_shared<Environment>(globalEnv.get());
-                
-                for (size_t i = 0; i < fn->params.size(); ++i) {
-                    currentEnv->define(fn->params[i], argValues[i]);
-                }
-                
-                try {
-					for (auto& s : fn->body) runStatement(s.get()); 
-				} catch (const ReturnException&) {
-					currentEnv = previousEnv; 
-					return; 
-				}
-                currentEnv = previousEnv; 
-                return;
-            }
-            return;
-        }
-
-        if (auto ifStmt = dynamic_cast<IfStmt*>(stmt)) {
-            if (isTruthy(evaluateExpr(ifStmt->condition.get()))) {
-                for (auto& s : ifStmt->thenBranch) runStatement(s.get());
-            } else {
-                for (auto& s : ifStmt->elseBranch) runStatement(s.get());
-            }
-            return;
-        }
-        if (auto whileLoop = dynamic_cast<WhileStmt*>(stmt)) {
-            while (isTruthy(evaluateExpr(whileLoop->condition.get()))) {
-                for (auto& s : whileLoop->body) runStatement(s.get());
-            }
-            return;
-        }
-        if (auto loop = dynamic_cast<ForStmt*>(stmt)) {
-             Obj collection = evaluateExpr(loop->collection.get());
-             if (std::holds_alternative<std::shared_ptr<List>>(collection.as)) {
-                 auto list = std::get<std::shared_ptr<List>>(collection.as);
-                 currentEnv->define(loop->iteratorName, Obj(0)); 
-                 for (auto& item : *list) {
-                     currentEnv->assign(loop->iteratorName, item); 
-                     for (auto& s : loop->body) runStatement(s.get());
-                 }
-             } else {
-                 std::cout << "Runtime Error: 'For' loop expects a list/range.\n";
-             }
+    // 5. DEFINITIONS
+    if (auto func = dynamic_cast<FuncDecl*>(stmt)) {
+        functionRegistry[func->name] = func;
+        return;
+    }
+    if (auto cls = dynamic_cast<ClassDecl*>(stmt)) {
+        auto klass = std::make_shared<LinkClass>();
+        klass->name = cls->name;
+        for (auto& method : cls->methods) klass->methods[method->name] = method.get();
+        currentEnv->define(cls->name, Obj(klass));
+        return;
+    }
+    if (dynamic_cast<ClearStmt*>(stmt)) {
+        #ifdef _WIN32 
+        system("cls"); 
+        #else 
+        system("clear"); 
+        #endif
+        return; 
+    }
+    if (auto prop = dynamic_cast<PropertyStmt*>(stmt)) { 
+        if (prop->name == "sh") { int s = system(prop->value.c_str()); (void)s; }
+        return;
+    }
+    if (auto imp = dynamic_cast<ImportStmt*>(stmt)) {
+		 std::string path = imp->path;
+         if (!Sys::fileExists(path)) {
+             std::cout << "Runtime Error: Cannot import '" << path << "'. File not found.\n";
              return;
-        }
-        if (auto up = dynamic_cast<UpdateStmt*>(stmt)) {
-            Obj val = currentEnv->get(up->name);
-            if (std::holds_alternative<int>(val.as)) {
-                currentEnv->assign(up->name, Obj(std::get<int>(val.as) + 1));
-            }
-            return;
-        }
-        if (auto prop = dynamic_cast<PropertyStmt*>(stmt)) {
-            if (prop->name == "sh") {
-                int status = system(prop->value.c_str()); (void)status; 
-            }
-            return;
-        }
-        if (auto app = dynamic_cast<AppDecl*>(stmt)) {
-            for (auto& s : app->body) runStatement(s.get());
-            return;
-        }
-        
-        // Import Logic (SAFE POINTER VERSION)
-        if (auto imp = dynamic_cast<ImportStmt*>(stmt)) {
-             std::string path = imp->path;
-             if (!Sys::fileExists(path)) {
-                 std::cout << "Runtime Error: Cannot import '" << path << "'. File not found.\n";
-                 return;
+         }
+         std::string source = Sys::readFile(path);
+         Lexer lexer(source);
+         auto tokens = lexer.tokenize();
+         Parser parser(tokens);
+         auto importedProgram = parser.parse();
+         
+         if (importedProgram) {
+             loadedPrograms.push_back(std::move(importedProgram));
+             Program* storedProgram = loadedPrograms.back().get();
+             for (auto& s : storedProgram->statements) {
+                 runStatement(s.get());
              }
-             std::string source = Sys::readFile(path);
-             Lexer lexer(source);
-             auto tokens = lexer.tokenize();
-             Parser parser(tokens);
-             auto importedProgram = parser.parse();
-             
-             if (importedProgram) {
-                 loadedPrograms.push_back(std::move(importedProgram));
-                 Program* storedProgram = loadedPrograms.back().get();
-                 for (auto& s : storedProgram->statements) {
-                     runStatement(s.get());
-                 }
-             }
-             return;
-        }
-	}
-};
+         }
+         return;
+    }
+}
+
+void Runtime::execute(std::unique_ptr<Program> program) {
+    if (!program) return;
+    for (auto& stmt : program->statements) {
+        runStatement(stmt.get());
+    }
+}

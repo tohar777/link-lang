@@ -1,11 +1,15 @@
 #include "help.h"
 #include <iostream>
 
+void printVersion() {
+	std::cout << "Link-Lang Version 0.4a (Alpha Release) \n" << std::endl;
+} 
+
 void printHelp() {
     std::cout << R"(
 
 ========================================================
-           NEBULA OS LINK-LANG v0.3 (Stable) HELP
+           NEBULA OS LINK-LANG v0.4a (Alpha) HELP
 ========================================================
 History:
 Created by   : Pilot0253

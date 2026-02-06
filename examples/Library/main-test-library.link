@@ -1,7 +1,7 @@
 print("=== SYSTEM MODULARITY TEST ===")
 
 # 1. Calls the library file
-import "math-tools.link"
+import math_tools
 
 print(">> Libary has been success imported.")
 
@@ -20,8 +20,8 @@ set area = circle_area(radius)
 print("   Circle Area (r=10): " + area)
 
 # 5. String Return Function
-print("\n[+] Testing String Return:")
-set msg = member_greet("Hello All...")
-print("   Message: " + msg)
+print("\n [+] Testing String Return:")
+set msg = member_greet("Linkians")
+print(" Message: " + msg)
 
 print("\n=== TEST FINISHED ===")
