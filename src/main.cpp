@@ -1,7 +1,5 @@
 #include <fstream>
 #include <iostream>
-#include <string>
-#include <vector>
 #include "lexer.h"
 #include "parser.h"
 #include "runtime.h" 
@@ -139,6 +137,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    std::ifstream file(argv[1]);
     std::string source((std::istreambuf_iterator<char>(file)),
                         std::istreambuf_iterator<char>());
 
