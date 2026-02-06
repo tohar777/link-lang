@@ -4,8 +4,6 @@
 #include "token.h"
 #include "ast.h"
 
-// the MEAT
-
 class Parser {
 public:
     Parser(const std::vector<Token>& tokens);
@@ -24,10 +22,31 @@ private:
     std::unique_ptr<AppDecl> parseApp();
     std::unique_ptr<WindowDecl> parseWindow();
     std::unique_ptr<FuncDecl> parseFunc();
-    std::unique_ptr<PropertyStmt> parseProperty();
+    
+    std::unique_ptr<Stmt> parseClass();
+    std::unique_ptr<Stmt> parseFor(); 
+    std::unique_ptr<Stmt> parseTry();
+    std::unique_ptr<Stmt> parseWhile(); 
+    std::unique_ptr<Stmt> parseIf(); 
+    std::unique_ptr<Stmt> parseSet();
+    std::unique_ptr<Stmt> parseReturn();
+	
+    // Expression Hierarchy (Updated for Logic Ops)
+    std::unique_ptr<Expr> parseExpression();
+    std::unique_ptr<Expr> parseLogicOr();
+    std::unique_ptr<Expr> parseLogicAnd();
+    std::unique_ptr<Expr> parseEquality();
+    std::unique_ptr<Expr> parseBitwise(); 
+    
+    std::unique_ptr<Expr> parseAdditive();
+    std::unique_ptr<Expr> parseTerm();
+    std::unique_ptr<Expr> parseUnary(); 
+    std::unique_ptr<Expr> parsePostfix(); 
+    std::unique_ptr<Expr> parsePrimary();
+    
+    std::vector<std::unique_ptr<Expr>> parseArguments();
     std::unique_ptr<CallStmt> parseCall();
     std::unique_ptr<ConnectStmt> parseConnect();
 
     bool isAtEnd() const;
 };
-

