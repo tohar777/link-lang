@@ -1,4 +1,21 @@
 #!/bin/bash
+clear
+echo "--- Compiling in Progress ---"
+
+rm -f error.txt 
+rm -f link 
+
+g++ -std=c++17 src/*.cpp -I./include -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -o link 2> error.txt
+
+# 3. Cek Error
+if [ -s error.txt ]; then
+    echo " !!! There is an Error Dude! Showing error.txt:"
+    echo "-----------------------------------"
+    cat error.txt
+else
+    echo "Compiled Success!!!"
+    echo "Try running: ./link <file.link>"
+=======
 
 echo "--- Compiling in Progress ---"
 

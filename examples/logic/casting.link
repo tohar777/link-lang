@@ -1,0 +1,20 @@
+print("=== TES TYPE CASTING ===")
+
+# 1. String to Integer
+set input_user = "50"
+set hasil = int(input_user) + 25
+print("String '50' + 25 = " + hasil)  # Must be 75 (bukan 5025)
+
+# 2. Float ke Integer
+set pi = 3.99
+print("Int dari 3.99 = " + int(pi))   # Harusnya 3 (pembulatan ke bawah)
+
+# 3. Integer ke String (Manual)
+set angka = 100
+set pesan = "My Score: " + str(angka) # Eksplisit
+print(pesan)
+
+# 4. Input Dinamis
+set tahun_lahir = int(input("Masukkan tahun lahir (String): "))
+set umur = 2026 - tahun_lahir
+print("Umur kamu sekitar: " + umur + " tahun.")
