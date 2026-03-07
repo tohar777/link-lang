@@ -7,6 +7,7 @@
 ╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝           ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝ 
 
 ---------------------------------------------------------------------------
+Version	  : 0.4 (Alpha Release) 
 Creator   : Pilot0253
 Developer : logoro17 // LoRoGo17
 PROJECT   : LinkLang (Interpreter)

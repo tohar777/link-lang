@@ -40,7 +40,7 @@ namespace SysString {
             list.push_back(token);
             str.erase(0, pos + delimiter.length());
         }
-        list.push_back(str); 
+        list.push_back(str); // Sisa string terakhir
         return list;
     }
 
@@ -56,13 +56,12 @@ namespace SysString {
     std::string substring(const std::string& str, int start, int length) {
         if (start < 0) return "";
         if (start >= (int)str.length()) return "";
-        
-         If length exceeds string size, cap it
         return str.substr(start, length);
     }
     
     std::string toLower(const std::string& str) {
         std::string result = str;
+        // Iterate and transform each char
         std::transform(result.begin(), result.end(), result.begin(),
                        [](unsigned char c){ return std::tolower(c); });
         return result;

@@ -8,7 +8,7 @@ rm -f link
 
 # 2. Compile dengan menunjuk file satu per satu (Lebih Aman)
 # Kita TIDAK memasukkan src/runtime.cpp di sini karena dia sudah di-include di main.cpp
-g++ -O3 src/*.cpp -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -I include -o link 2> error.txt
+g++ -std=c++17 src/*.cpp -I./include -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -o link 2> error.txt
 
 # 3. Cek Error
 if [ -s error.txt ]; then

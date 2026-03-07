@@ -10,7 +10,7 @@ namespace SysGui {
     bool isFontLoaded = false;
     std::map<std::string, Texture2D> imageRegistry;
     
-    bool _shouldClose = false;  
+    bool _shouldClose = false; // Gunakan variabel internal
 
     void stop() {
 		std::cout << " [DEBUG] Dipencet"; 
@@ -45,7 +45,7 @@ namespace SysGui {
 
     // --- WINDOW ---
     void setup(int width, int height, const std::string& title) {
-        SetConfigFlags(FLAG_WINDOW_RESIZABLE);  
+        SetConfigFlags(FLAG_WINDOW_RESIZABLE); // WAJIB ADA BIAR BISA RESIZE
         InitWindow(width, height, title.c_str());
         SetTargetFPS(60);
     }
@@ -132,17 +132,18 @@ namespace SysGui {
         }
     }
 
-    // --- INPUT HANDLING  
+    // --- INPUT HANDLING (INI YANG SEBELUMNYA ERROR/HILANG) ---
     int getMouseX() { return GetMouseX(); }
     int getMouseY() { return GetMouseY(); }
     float getMouseWheel() { return GetMouseWheelMove(); }
     
     bool isMousePressed() { return IsMouseButtonPressed(MOUSE_BUTTON_LEFT); }
-    bool isMouseDown() { return IsMouseButtonDown(MOUSE_BUTTON_LEFT); }  
+    bool isMouseDown() { return IsMouseButtonDown(MOUSE_BUTTON_LEFT); } // <- INI YANG HILANG DI ERROR LOG KAMU
 
     int getKeyPressed() { return GetKeyPressed(); }
     int getCharPressed() { return GetCharPressed(); }
-     
+    
+    // Ini juga sempat error di log kamu (undefined reference)
     bool isKeyDown(const std::string& key) {
         int k = getKeyFromName(key);
         return (k != 0) && IsKeyDown(k);
@@ -153,4 +154,4 @@ namespace SysGui {
         return (k != 0) && IsKeyPressed(k);
     }
 
-}  
+} // end namespace

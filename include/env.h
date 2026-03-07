@@ -1,4 +1,3 @@
-// env.h
 #pragma once
 #include "types.h"
 #include <unordered_map>
@@ -19,6 +18,7 @@ struct Environment {
         if (values.count(name)) return values[name];
         if (enclosing) return enclosing->get(name);
         return Obj();  
+    } // <--- Tambahkan kurung ini!
 
     void assign(const std::string& name, Obj val) {
         if (values.count(name)) {

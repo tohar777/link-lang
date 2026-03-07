@@ -1,5 +1,7 @@
 #include <fstream>
 #include <iostream>
+#include <string>
+#include <vector>
 #include "lexer.h"
 #include "parser.h"
 #include "runtime.h" 
@@ -65,6 +67,8 @@ int main(int argc, char** argv) {
             return 0;
         }
     }
+
+    // 2. Cek Flag --debug
     bool debugMode = false;
     for(int i=1; i<argc; i++) {
         if(std::string(argv[i]) == "--debug") {
@@ -137,7 +141,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::ifstream file(argv[1]);
     std::string source((std::istreambuf_iterator<char>(file)),
                         std::istreambuf_iterator<char>());
 
