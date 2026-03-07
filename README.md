@@ -7,11 +7,12 @@
 ╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝           ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝ 
 
 ---------------------------------------------------------------------------
+Version	  : 0.4 (Alpha Release) 
 Creator   : Pilot0253
 Developer : logoro17 // LoRoGo17
 PROJECT   : LinkLang (Interpreter)
 LANGUAGE  : C++ / Python
-OS        : Kali Linux / Android (Custom Kernel)
+OS        : Linux Distro / Android (Custom Kernel) ARM-v8a
 STATUS    : 🚀 Active Development
 ```
 **Link-Lang** is a dynamic, interpreted programming language built for **NebulaOS**. It features a clean, Python-like syntax based on indentation, designed for simplicity and readability. Built from scratch using C++ (Lexer, Parser, AST, Runtime).
