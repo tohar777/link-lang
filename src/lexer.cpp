@@ -4,7 +4,6 @@
 #include <unordered_map>
 
 static const std::unordered_map<std::string, TokenType> keywords = {
-<<<<<<< HEAD
     {"app", TokenType::APP},            {"for", TokenType::FOR},            {"while", TokenType::WHILE},
     {"if", TokenType::IF},              {"elif", TokenType::ELIF},          {"else", TokenType::ELSE},
     {"window", TokenType::WINDOW},      {"func", TokenType::FUNC},          {"return", TokenType::RETURN},  
@@ -19,15 +18,6 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"and", TokenType::AND}, 			{"or", TokenType::OR}, 
     {"true", TokenType::TRUE},          {"false", TokenType::FALSE}, 
     {"clear", TokenType::CLEAR},        {"cls", TokenType::CLS} 
-=======
-    {"app", TokenType::APP}, {"for", TokenType::FOR}, {"while", TokenType::WHILE},
-    {"if", TokenType::IF}, {"elif", TokenType::ELIF}, {"else", TokenType::ELSE},
-    {"window", TokenType::WINDOW}, {"func", TokenType::FUNC},
-    {"expose", TokenType::EXPOSE}, {"connect", TokenType::CONNECT},
-    {"package", TokenType::PACKAGE}, {"sh", TokenType::SH},
-    {"in", TokenType::IN}, {"set", TokenType::SET},
-    {"true", TokenType::TRUE}, {"false", TokenType::FALSE} // [BARU]
->>>>>>> a9e7b5f67ff71ead5b253ae707b9ab78576a0a8c
 };
 
 Lexer::Lexer(const std::string& source) : src(source), pos(0), line(1), column(1) {
@@ -116,24 +106,6 @@ Token Lexer::number() {
     return Token{isFloat ? TokenType::TOKEN_FLOAT : TokenType::TOKEN_NUM, value, line, startCol}; 
 }
 
-Token Lexer::number() {
-    int startCol = column;
-    std::string value;
-    bool isFloat = false;
-
-    while (std::isdigit(peek())) value += advance();
-
-    // check point for float -> . in number x/.00
-    if (peek() == '.') {
-        isFloat = true;
-        value += advance(); // makan titik
-        while (std::isdigit(peek())) value += advance();
-    }
-
-    return Token{isFloat ? TokenType::TOKEN_FLOAT : TokenType::TOKEN_NUM, value, line, startCol}; 
-}
-
-
 std::vector<Token> Lexer::tokenize() {
     std::vector<Token> tokens;
     while (pos < src.size()) {
@@ -144,33 +116,17 @@ std::vector<Token> Lexer::tokenize() {
         if (std::isalpha(c) || c == '_') { tokens.push_back(identifier()); continue; }
         if (std::isdigit(c)) { tokens.push_back(number()); continue; }
         if (c == '"') { tokens.push_back(stringLiteral()); continue; }
-<<<<<<< HEAD
         if (c == '\'') {
             int startCol = column;
             std::string value;
             advance(); 
             while (peek() != '\'' && peek() != '\0') value += advance();
             if (!match('\'')) throw std::runtime_error("Unterminated quote");
-=======
-        
-        if (c == '"') { tokens.push_back(stringLiteral()); continue; }
-         if (c == '\'') {
-            int startCol = column;
-            std::string value;
-            advance(); // skip opening '
-            while (peek() != '\'' && peek() != '\0') {
-                value += advance();
-            }
-            if (!match('\'')) throw std::runtime_error("Unterminated quote at line " + std::to_string(line));
-            
-            // Logika: Panjang 1 = Char, Selain itu = String
->>>>>>> a9e7b5f67ff71ead5b253ae707b9ab78576a0a8c
             if (value.length() == 1) tokens.push_back(Token{TokenType::CHAR, value, line, startCol});
             else tokens.push_back(Token{TokenType::STRING, value, line, startCol});
             continue;
         }
         
-<<<<<<< HEAD
         if (c == '!') {
             advance();
             if (match('=')) tokens.push_back(makeToken(TokenType::BANG_EQ, "!="));
@@ -248,43 +204,6 @@ std::vector<Token> Lexer::tokenize() {
             continue;
         }
         
-=======
-        // SYMBOLS (Debug Here)
-        if (c == '(') { advance(); tokens.push_back(makeToken(TokenType::LPAREN, "(")); continue; }
-        if (c == ')') { advance(); tokens.push_back(makeToken(TokenType::RPAREN, ")")); continue; }
-        if (c == '{') { advance(); tokens.push_back(makeToken(TokenType::LBRACE, "{")); continue; }
-        if (c == '}') { advance(); tokens.push_back(makeToken(TokenType::RBRACE, "}")); continue; }
-        if (c == '.') { advance(); tokens.push_back(makeToken(TokenType::DOT, ".")); continue; }
-
-		// PENTING: Tambahkan string "+", "-", "*", "/" sebagai argumen kedua makeToken
-        if (c == '*') { advance(); tokens.push_back(makeToken(TokenType::STAR, "*")); continue; }
-        if (c == '/') { advance(); tokens.push_back(makeToken(TokenType::SLASH, "/")); continue; }
-        
-        // Comparator Logic
-        if (c == '<') { advance(); tokens.push_back(makeToken(TokenType::LT, "<")); continue; }
-        if (c == '>') { advance(); tokens.push_back(makeToken(TokenType::GT, ">")); continue; }
-        
-        // Handle '=' or '==' 
-        if (c == '=') { 
-            advance(); 
-            if (match('=')) tokens.push_back(makeToken(TokenType::EQ_EQ, "=="));
-            else tokens.push_back(makeToken(TokenType::ASSIGN, "=")); 
-            continue; 
-        }
-        
-        if (c == '+') {
-            advance();
-            if (match('+')) tokens.push_back(makeToken(TokenType::PLUS_PLUS, "++"));
-            else tokens.push_back(makeToken(TokenType::PLUS, "+")); // Tambahkan "+"
-            continue;
-        }
-        if (c == '-') {
-            advance();
-            if (match('>')) tokens.push_back(makeToken(TokenType::ARROW, "->"));
-            else tokens.push_back(makeToken(TokenType::MINUS, "-")); // Tambahkan "-"
-            continue;
-        }
->>>>>>> a9e7b5f67ff71ead5b253ae707b9ab78576a0a8c
         throw std::runtime_error("Unknown char: " + std::string(1, c));
     }
     tokens.push_back(makeToken(TokenType::EOF_TOKEN));
