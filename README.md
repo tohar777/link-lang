@@ -67,5 +67,10 @@ Ensure you have a C++ compiler installed (G++ recommended).
 To run a file ending in `.link`:
 ```bash
 ./link examples/test.link
+```
+Link on Nebula OS preinstall has a symlink to make this automatic:
+```bash
+linkrun examples/test.link
+```
 
 
