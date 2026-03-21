@@ -20,6 +20,11 @@ USAGE:
   ./link <file.link>      : Execute a Link-Lang script file.
   ./link --help           : Show this manual.
 
+USAGE ON NEBULA OS PREINSTALL:
+  linkrun                  : Enter Interactive Mode (REPL).
+  linkrun <file.link>      : Execute a Link-Lang script file.
+  linkrun --help           : Show this manual.
+
 DATA TYPES:
   Integer  : 10, 25, -5
   Float    : 3.14, 2.5
