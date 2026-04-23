@@ -99,5 +99,6 @@ on your system.
 🚀 Usage
 Running a Script
 **To run a file ending in .link:**
-
+```bash
 ./link examples/test.link
+```
