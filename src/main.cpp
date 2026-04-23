@@ -1,5 +1,7 @@
 #include <fstream>
 #include <iostream>
+#include <string>
+#include <vector>
 #include "lexer.h"
 #include "parser.h"
 #include "runtime.h" 
@@ -55,7 +57,7 @@ int main(int argc, char** argv) {
     if (argc == 2) {
         std::string arg = argv[1];
 
-        if (arg == "--help") {
+        if (arg == "--help" || arg == "-h") {
             printHelp();
             return 0;
         }
@@ -65,6 +67,8 @@ int main(int argc, char** argv) {
             return 0;
         }
     }
+
+    // 2. Check the --debug flag
     bool debugMode = false;
     for(int i=1; i<argc; i++) {
         if(std::string(argv[i]) == "--debug") {
@@ -74,7 +78,7 @@ int main(int argc, char** argv) {
     }
 
     if (argc < 2 || (argc == 2 && debugMode)) {
-        std::cout << "NebulaOS Link-Lang v0.3 (Interactive)" << std::endl;
+        std::cout << "NebulaOS Link-Lang v0.3 (Analyzer)" << std::endl;
         if (debugMode) std::cout << "[DEBUG MODE ACTIVE]" << std::endl;
         std::cout << "Type 'exit' to quit." << std::endl;
         ReplEditor editor;
@@ -137,7 +141,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::ifstream file(argv[1]);
     std::string source((std::istreambuf_iterator<char>(file)),
                         std::istreambuf_iterator<char>());
 

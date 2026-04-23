@@ -12,20 +12,22 @@ struct Stmt;
 struct LinkClass;   
 struct LinkInstance;
 
+struct FuncDecl;           
+struct Environment;        
+
+struct LinkFunction {
+    FuncDecl* declaration;
+    std::shared_ptr<Environment> closure;
+};
+
 using List = std::vector<Value>;
 using Dict = std::unordered_map<std::string, Value>;
 struct Value {
     using ValVariant = std::variant<
-        std::monostate, 
-        int, 
-        double, 
-        std::string, 
-        char, 
-        bool, 
-        std::shared_ptr<List>, 
-        std::shared_ptr<Dict>,
-        std::shared_ptr<LinkClass>, 
-        std::shared_ptr<LinkInstance>
+        std::monostate, int, double, std::string, char, bool, 
+        std::shared_ptr<List>, std::shared_ptr<Dict>,
+        std::shared_ptr<LinkClass>, std::shared_ptr<LinkInstance>,
+        std::shared_ptr<LinkFunction> // <--- New data type (Function)
     >;
     
     ValVariant as;
@@ -41,6 +43,7 @@ struct Value {
     Value(std::shared_ptr<Dict> v) : as(v) {}
     Value(std::shared_ptr<LinkClass> v) : as(v) {}
     Value(std::shared_ptr<LinkInstance> v) : as(v) {}
+    Value(std::shared_ptr<LinkFunction> v) : as(v) {} // <--- Constructor baru
 };
 
 using Obj = Value;
@@ -85,6 +88,9 @@ inline void printObj(const Obj& val) {
     else if (std::holds_alternative<std::shared_ptr<LinkInstance>>(val.as)) {
         auto instance = std::get<std::shared_ptr<LinkInstance>>(val.as);
         std::cout << "<Instance " << instance->klass->name << ">";
+    }
+    else if (std::holds_alternative<std::shared_ptr<LinkFunction>>(val.as)) {
+        std::cout << "<Function>"; // Simply print this to avoid circular dependency
     }
     else std::cout << "nil";
 }

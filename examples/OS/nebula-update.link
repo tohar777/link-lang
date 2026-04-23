@@ -1,13 +1,13 @@
 # === NEBULA OS SECURITY SCANNER ===
 
-# 1. Konfigurasi (Test Multiline Dictionary)
+# 1. Configuration (Test Multiline Dictionary)
 set config = {
     "target": "System Root",
     "scan_level": 3,
     "log_file": "security_log.txt"
 }
 
-# 2. Database Ancaman (Test Multiline List)
+# 2. Threat Database (Test Multiline List)
 set threats = [
     "Trojan.Win32.Generic",
     "Rootkit.Nebula.Hidden",
@@ -15,7 +15,7 @@ set threats = [
     "Adware.SuperFish"
 ]
 
-# 3. Bersihkan log lama
+# 3. Clean up old log
 if io.exists(config["log_file"])
     io.remove(config["log_file"])
 
@@ -28,11 +28,11 @@ set id = 0
 for threat in threats
     print("\nScanning for signature: " + threat)
     
-    # Menjalankan perintah shell asli Linux/Windows untuk efek visual
-    # (Menggunakan 'echo' agar aman di semua OS)
+    # Run real Linux/Windows shell command for visual effect
+    # (Using 'echo' to keep it safe on all OSes)
     sh "echo '  >> Analyzing memory segments...'"
     
-    # Simulasi logika deteksi (kita anggap item ke-2 berbahaya)
+    # Simulated detection logic (we assume item 2 is malicious)
     if id == 1
         print("  [!] CRITICAL ALERT: Threat Detected!")
         io.append(config["log_file"], "[ALERT] FOUND: " + threat + "\n")
@@ -42,11 +42,11 @@ for threat in threats
     
     set id = id + 1
 
-# 6. Selesai
+# 6. Done
 print("\nScan Complete.")
 print("Log saved to: " + config["log_file"])
 
-# Tampilkan isi log yang baru dibuat
+# Show the newly created log content
 print("\n--- VIEW LOG ---")
 set log_data = io.read(config["log_file"])
 print(log_data)

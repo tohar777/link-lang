@@ -43,18 +43,34 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
     if (match(TokenType::CLEAR) || match(TokenType::CLS)) return std::make_unique<ClearStmt>();
     if (match(TokenType::CLASS)) return parseClass(); 
     if (match(TokenType::IMPORT)) {
-        std::string path;
-        if (peek().type == TokenType::IDENTIFIER) {
-            path = advance().value + ".link";
-        } 
-        else if (peek().type == TokenType::STRING) {
-            path = advance().value;
-        } 
-        else {
-            throw std::runtime_error("Expected library name after 'import'");
+    std::string path = consume(TokenType::STRING, "Expected file path (string) after import").value;
+    return std::make_unique<ImportStmt>(path);
+}
+
+    // --- EXTERN C++ PARSING LOGIC ---
+    if (match(TokenType::EXTERN)) {
+        consume(TokenType::STRING, "Expect language type after extern (e.g., \"c\")");
+        std::string lang = previous().value;
+        
+        // Capture optional flags
+        std::string flags = "";
+        if (peek().type == TokenType::STRING) {
+            flags = advance().value; 
         }
-        return std::make_unique<ImportStmt>(path);
+        
+        consume(TokenType::LBRACE, "Expect '{' before extern code block");
+        
+        std::string rawCode = "";
+        if (peek().type == TokenType::STRING) {
+            rawCode = advance().value;
+        }
+        
+        consume(TokenType::RBRACE, "Expect '}' after extern block");
+        
+        // Ensure there are 3 arguments here: lang, flags, rawCode
+        return std::make_unique<ExternStmt>(lang, flags, rawCode);
     }
+    // ---------------------------------
 
     if (match(TokenType::SET)) 		return parseSet(); 
     if (match(TokenType::APP)) 		return parseApp();
@@ -83,23 +99,29 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
                 advance();
                 method = "clear";
             } 
-            else if (peek().type == TokenType::CLS) {
-                advance();
-                method = "cls";
-            }
             
             else if (peek().type == TokenType::CONNECT) {
 				advance();
 				method = "connect"; 
 			}
             
+            else if (peek().type == TokenType::CLS) {
+                advance();
+                method = "cls";
+            }
+            // Also add this block
+            else if (peek().type == TokenType::INIT) {
+                advance();
+                method = "init";
+            }
             else {
                 method = consume(TokenType::IDENTIFIER, "Expected method").value;
             }
+
             if (name == "time" || name == "math" || name == "io"   || 
                 name == "os"   || name == "str"  || name == "list" ||
                 name == "fs"   || name == "term" || name == "dict" ||
-                name == "net") {
+                name == "net"  || name == "audio"|| name == "gui") { // <-- Add here too
                 
                 name += "." + method;
                 isMethodCall = false;
@@ -244,7 +266,13 @@ std::unique_ptr<Expr> Parser::parsePostfix() {
             expr = std::make_unique<IndexExpr>(std::move(expr), std::move(index));
         } 
         else if (match(TokenType::DOT)) {
-            std::string name = consume(TokenType::IDENTIFIER, "Expected property name").value;
+            std::string name;
+            // Allow 'init' to be called as property/method
+            if (match(TokenType::INIT)) {
+                name = "init";
+            } else {
+                name = consume(TokenType::IDENTIFIER, "Expected property name").value;
+            }
             expr = std::make_unique<GetExpr>(std::move(expr), name);
         }
         else if (match(TokenType::LPAREN)) {

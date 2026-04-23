@@ -13,7 +13,7 @@
 #include "env.h"
 #include "parser.h" 
 
-// Definisi Tipe Native Function
+// Native Function type definition
 using NativeFn = std::function<Obj(const std::vector<Obj>&)>;
 
 class Runtime {
@@ -40,7 +40,7 @@ private:
 public:
     Runtime(); // Constructor
 
-    // Fungsi Eksekusi Utama
+    // Main execution function
     void run(const std::string& source, bool debug);
     void runStatement(Stmt* stmt);
     Obj evaluateExpr(Expr* expr);

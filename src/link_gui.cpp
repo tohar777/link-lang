@@ -10,10 +10,18 @@ namespace SysGui {
     bool isFontLoaded = false;
     std::map<std::string, Texture2D> imageRegistry;
     
-    bool _shouldClose = false;  
+    bool _shouldClose = false; // Gunakan variabel internal
+    bool _guiDebug = false; // Debug Flag
+
+    void enableDebug() {
+        _guiDebug = true;
+        // Kembalikan log Raylib ke tingkat normal (INFO, WARNING, ERROR, dll)
+        SetTraceLogLevel(LOG_INFO); 
+        std::cout << "[LINK-LANG] GUI Debug Mode Enabled.\n";
+    }
 
     void stop() {
-		std::cout << " [DEBUG] Dipencet"; 
+		std::cout << " [DEBUG] : \n "; 
         _shouldClose = true;
     }
 
@@ -45,8 +53,18 @@ namespace SysGui {
 
     // --- WINDOW ---
     void setup(int width, int height, const std::string& title) {
-        SetConfigFlags(FLAG_WINDOW_RESIZABLE);  
+        if (!_guiDebug) {
+            SetTraceLogLevel(LOG_NONE); 
+        }
+        
+        // FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI | FLAG_VSYNC_HINT; // Debug Features HighDPI from C++
+        SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT); 
+
         InitWindow(width, height, title.c_str());
+        // --- Force RayLib for Resize  ---
+        SetWindowMinSize(300, 200); 
+        SetWindowSize(width, height); 
+        // --------------------------------------------------------
         SetTargetFPS(60);
     }
 
@@ -108,6 +126,7 @@ namespace SysGui {
         else if (color == "red") c = RED;
         else if (color == "green") c = GREEN;
         else if (color == "blue") c = BLUE;
+        else if (color == "cyan") c = {0, 255, 255, 255}; // 🔥 TAMBAHKAN INI
         else if (color == "gray") c = Fade(GRAY, 0.8f);
         DrawRectangle(x, y, w, h, c);
     }
@@ -118,6 +137,7 @@ namespace SysGui {
         else if (color == "red") c = RED;
         else if (color == "green") c = GREEN;
         else if (color == "blue") c = BLUE;
+        else if (color == "cyan") c = {0, 255, 255, 255}; // 🔥 TAMBAHKAN INI JUGA
         
         if (isFontLoaded) DrawTextEx(currentFont, text.c_str(), {(float)x, (float)y}, size, 1.0f, c);
         else DrawText(text.c_str(), x, y, size, c);
@@ -132,17 +152,18 @@ namespace SysGui {
         }
     }
 
-    // --- INPUT HANDLING  
+    // --- INPUT HANDLING (INI YANG SEBELUMNYA ERROR/HILANG) ---
     int getMouseX() { return GetMouseX(); }
     int getMouseY() { return GetMouseY(); }
     float getMouseWheel() { return GetMouseWheelMove(); }
     
     bool isMousePressed() { return IsMouseButtonPressed(MOUSE_BUTTON_LEFT); }
-    bool isMouseDown() { return IsMouseButtonDown(MOUSE_BUTTON_LEFT); }  
+    bool isMouseDown() { return IsMouseButtonDown(MOUSE_BUTTON_LEFT); } // <- INI YANG HILANG DI ERROR LOG KAMU
 
     int getKeyPressed() { return GetKeyPressed(); }
     int getCharPressed() { return GetCharPressed(); }
-     
+    
+    // Ini juga sempat error di log kamu (undefined reference)
     bool isKeyDown(const std::string& key) {
         int k = getKeyFromName(key);
         return (k != 0) && IsKeyDown(k);
@@ -152,5 +173,8 @@ namespace SysGui {
         int k = getKeyFromName(key);
         return (k != 0) && IsKeyPressed(k);
     }
+    double getTime() {
+        return GetTime();
+    }
 
-}  
+} // end namespace
