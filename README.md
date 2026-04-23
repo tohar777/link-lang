@@ -100,5 +100,5 @@ on your system.
 Running a Script
 **To run a file ending in .link:**
 ```bash
-./link examples/test.link
+./link examples/hello.link
 ```
