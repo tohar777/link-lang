@@ -17,6 +17,7 @@ private:
     const Token& advance();
     bool match(TokenType type);
     const Token& consume(TokenType type, const std::string& err);
+    const Token& previous() const { return tokens[current - 1]; }
 
     std::unique_ptr<Stmt> parseStatement();
     std::unique_ptr<AppDecl> parseApp();

@@ -316,6 +316,7 @@ struct NewExpr : public Expr {
     
     void print() const override { std::cout << "new " << className << "(...)"; }
 }; 
+
 struct ExprStmt : public Stmt {
     std::unique_ptr<Expr> expression;
     ExprStmt(std::unique_ptr<Expr> e) : expression(std::move(e)) {}
@@ -336,5 +337,19 @@ struct BreakStmt : public Stmt {
 struct ContinueStmt : public Stmt {
     void print(int indent = 0) override {
         std::cout << std::string(indent, ' ') << "Continue\n";
+    }
+};
+
+struct ExternStmt : public Stmt {
+    std::string lang;
+    std::string flags; 
+    std::string code;
+    
+    ExternStmt(std::string l, std::string f, std::string c) : lang(l), flags(f), code(std::move(c)) {}
+
+    void print(int indent = 0) override {
+        std::cout << std::string(indent, ' ') << "Extern \"" << lang << "\" Flags: [" << flags << "] {\n";
+        std::cout << std::string(indent + 2, ' ') << "[Raw Native Code Block]\n";
+        std::cout << std::string(indent, ' ') << "}\n";
     }
 };

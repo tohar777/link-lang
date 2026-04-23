@@ -4,6 +4,8 @@
 #include <string>
 
 namespace SysGui {
+    void enableDebug(); 
+    
     // Window Management
     void setup(int width, int height, const std::string& title);
     void close();
@@ -41,6 +43,7 @@ namespace SysGui {
     int getCharPressed();
     bool isKeyDown(const std::string& key);     
     bool isKeyPressed(const std::string& key);  
+    double getTime(); 
 }
 
 #endif

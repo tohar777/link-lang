@@ -1,14 +1,18 @@
+# File: math_tools.link
+
 print("   [INFO] Loading Library Math Tools...")
 
 set PI = 3.14
 
-# Kuadrat Function still support by SPACE not TAB
-func squareroot(x)
+func squareroot(x) {
     return x * x
+}
 
-func circle_area(r)
+func circle_area(r) {
     set result = PI * squareroot(r)
     return result
+}
 
-func member_greet(name)
+func member_greet(name) {
     return "Hello " + name + ", Welcome to Link-Language!"
+}

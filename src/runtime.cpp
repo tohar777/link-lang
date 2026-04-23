@@ -4,6 +4,12 @@
 #include <termios.h> 
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <wait.h>
+#include <dlfcn.h>
 #endif
 
 #include <iostream>
@@ -29,6 +35,8 @@
 #include "link_net.h"
 #include "runtime.h"
 #include "link_gui.h"
+#include "link_wrapper.h"
+#include "link_audio.h"
 
 namespace fs= std::filesystem; 
 static std::random_device rd;
@@ -102,6 +110,11 @@ void Runtime::initNativeFunctions() {
     // ==========================================
     // 1. NETWORKING MODULE (SysNet)
     // ==========================================
+    nativeRegistry["net.socket"] = [](const std::vector<Obj>& args) -> Obj {
+        int s = SysNet::createSocket();
+        return Obj(s);
+    };
+
     nativeRegistry["net.server"] = [](const std::vector<Obj>& args) -> Obj {
         if (args.empty()) return Obj(-1);
         int port = 80;
@@ -210,7 +223,7 @@ void Runtime::initNativeFunctions() {
     // 3. SYSTEM & IO
     // ==========================================
     nativeRegistry["term.getch"] = [](const std::vector<Obj>& args) -> Obj {
-        char c = getChar(); // Pastikan fungsi getChar() terlihat disini
+        char c = getChar(); // Ensure getChar() is visible here
         return Obj(std::string(1, c));
     };
     nativeRegistry["term.color"] = [this](const std::vector<Obj>& args) -> Obj {
@@ -258,7 +271,7 @@ void Runtime::initNativeFunctions() {
         if (args.empty()) return Obj("");
         if (std::holds_alternative<std::string>(args[0].as)) {
             std::string path = std::get<std::string>(args[0].as);
-            if (!Sys::fileExists(path)) return Obj(""); // Atau throw error
+            if (!Sys::fileExists(path)) return Obj(""); // Or throw an error
             return Obj(Sys::readFile(path));
         }
         return Obj("");
@@ -376,7 +389,7 @@ void Runtime::initNativeFunctions() {
         return Obj(full.rfind(prefix, 0) == 0);
     };
 
-    // 3. str.substr("cd Desktop", 3) -> "Desktop" (Potong string)
+    // 3. str.substr("cd Desktop", 3) -> "Desktop" (Substring operation)
     nativeRegistry["str.substr"] = [this](const std::vector<Obj>& args) -> Obj {
         if (args.size() < 2) return Obj("");
         std::string str = objToString(args[0]);
@@ -405,10 +418,13 @@ void Runtime::initNativeFunctions() {
     // ==========================================
     // 6. MATH LIBRARY
     // ==========================================
-    auto asDouble = [](const Obj& o) -> double {
-        if (std::holds_alternative<double>(o.as)) return std::get<double>(o.as);
-        if (std::holds_alternative<int>(o.as)) return (double)std::get<int>(o.as);
-        return 0.0;
+    auto asInt = [](const Obj& o) -> int {
+        if (std::holds_alternative<int>(o.as)) return std::get<int>(o.as);
+        if (std::holds_alternative<double>(o.as)) return (int)std::get<double>(o.as);
+        if (std::holds_alternative<std::string>(o.as)) {
+            try { return std::stoi(std::get<std::string>(o.as)); } catch(...) { return 0; }
+        }
+        return 0;
     };
 
     nativeRegistry["math.random"] = [](const std::vector<Obj>& args) -> Obj {
@@ -426,24 +442,24 @@ void Runtime::initNativeFunctions() {
 
     nativeRegistry["math.pi"] = [](const std::vector<Obj>& args) -> Obj { return Obj(SysMath::pi()); };
     
-    nativeRegistry["math.sin"] = [asDouble](const std::vector<Obj>& args) -> Obj { 
-        return args.empty() ? Obj(0.0) : Obj(SysMath::sin(asDouble(args[0]))); 
+    nativeRegistry["math.sin"] = [asInt](const std::vector<Obj>& args) -> Obj { 
+        return args.empty() ? Obj(0.0) : Obj(SysMath::sin(asInt(args[0]))); 
     };
-    nativeRegistry["math.cos"] = [asDouble](const std::vector<Obj>& args) -> Obj { 
-        return args.empty() ? Obj(0.0) : Obj(SysMath::cos(asDouble(args[0]))); 
+    nativeRegistry["math.cos"] = [asInt](const std::vector<Obj>& args) -> Obj { 
+        return args.empty() ? Obj(0.0) : Obj(SysMath::cos(asInt(args[0]))); 
     };
-    nativeRegistry["math.sqrt"] = [asDouble](const std::vector<Obj>& args) -> Obj { 
-        return args.empty() ? Obj(0.0) : Obj(SysMath::sqrt(asDouble(args[0]))); 
+    nativeRegistry["math.sqrt"] = [asInt](const std::vector<Obj>& args) -> Obj { 
+        return args.empty() ? Obj(0.0) : Obj(SysMath::sqrt(asInt(args[0]))); 
     };
-    nativeRegistry["math.pow"] = [asDouble](const std::vector<Obj>& args) -> Obj {
+    nativeRegistry["math.pow"] = [asInt](const std::vector<Obj>& args) -> Obj {
         if (args.size() < 2) return Obj(0.0);
-        double base = asDouble(args[0]);
-        double exp = asDouble(args[1]);
+        double base = asInt(args[0]);
+        double exp = asInt(args[1]);
         return Obj(std::pow(base, exp));
     };
-    nativeRegistry["math.abs"] = [asDouble](const std::vector<Obj>& args) -> Obj {
+    nativeRegistry["math.abs"] = [asInt](const std::vector<Obj>& args) -> Obj {
         if (args.empty()) return Obj(0.0);
-        double val = asDouble(args[0]);
+        double val = asInt(args[0]);
         return Obj(std::abs(val)); 
     };
     
@@ -518,6 +534,32 @@ void Runtime::initNativeFunctions() {
         }
         return Obj(0);
     };
+        nativeRegistry["list.insert"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.size() >= 3 && std::holds_alternative<std::shared_ptr<List>>(args[0].as) && 
+            std::holds_alternative<int>(args[1].as)) {
+            auto list = std::get<std::shared_ptr<List>>(args[0].as);
+            int idx = std::get<int>(args[1].as);
+            if (idx >= 0 && idx <= (int)list->size()) {
+                list->insert(list->begin() + idx, args[2]);
+                return Obj(true);
+            }
+        }
+        return Obj(false);
+    };
+
+    nativeRegistry["list.remove"] = [](const std::vector<Obj>& args) -> Obj {
+        if (args.size() >= 2 && std::holds_alternative<std::shared_ptr<List>>(args[0].as) && 
+            std::holds_alternative<int>(args[1].as)) {
+            auto list = std::get<std::shared_ptr<List>>(args[0].as);
+            int idx = std::get<int>(args[1].as);
+            if (idx >= 0 && idx < (int)list->size()) {
+                list->erase(list->begin() + idx);
+                return Obj(true);
+            }
+        }
+        return Obj(false);
+    };
+
     // ==========================================
     // GUI MODULE (Bridge to src/link_gui.cpp)
     // ==========================================
@@ -540,18 +582,31 @@ void Runtime::initNativeFunctions() {
         return Obj(SysGui::measureText(txt, size));
     };
 
-    nativeRegistry["gui_setup"] = [this](const std::vector<Obj>& args) -> Obj {
-    if (args.size() < 3) return Obj(0);
-    int w = 800; int h = 600;
-    
-    if (std::holds_alternative<int>(args[1].as)) h = std::get<int>(args[1].as);
-    else if (std::holds_alternative<double>(args[1].as)) h = (int)std::get<double>(args[1].as);
-    
-    std::string title = objToString(args[2]);
-    
-    SysGui::setup(w, h, title);
-    return Obj(0);
+    nativeRegistry["gui_debug"] = [](const std::vector<Obj>& args) -> Obj {
+        SysGui::enableDebug();
+        return Obj(0);
     };
+
+    nativeRegistry["gui_setup"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 3) return Obj(0);
+        
+        int w = 800; 
+        int h = 600;
+        
+        // Get width (args[0])
+        if (std::holds_alternative<int>(args[0].as)) w = std::get<int>(args[0].as);
+        else if (std::holds_alternative<double>(args[0].as)) w = (int)std::get<double>(args[0].as);
+        
+        // Get height (args[1])
+        if (std::holds_alternative<int>(args[1].as)) h = std::get<int>(args[1].as);
+        else if (std::holds_alternative<double>(args[1].as)) h = (int)std::get<double>(args[1].as);
+        
+        std::string title = objToString(args[2]);
+        
+        SysGui::setup(w, h, title);
+        return Obj(0);
+    };
+
     nativeRegistry["gui_close"] = [](const std::vector<Obj>& args) -> Obj {
         SysGui::close();
         return Obj(0);
@@ -578,30 +633,30 @@ void Runtime::initNativeFunctions() {
     return Obj(0);
     };
 
-    nativeRegistry["gui_text"] = [this](const std::vector<Obj>& args) -> Obj {
-    if (args.size() < 3) return Obj(0);
-    int x = std::stoi(objToString(args[0]));
-    int y = std::stoi(objToString(args[1]));
-    std::string text = objToString(args[2]);
-    std::string color = "black";
-    int size = 20;
-    
-    if (args.size() >= 4) color = objToString(args[3]);
-    if (args.size() >= 5) size = std::stoi(objToString(args[4]));
+    nativeRegistry["gui_text"] = [asInt, this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 3) return Obj(0);
+        int x = asInt(args[0]);
+        int y = asInt(args[1]);
+        std::string text = objToString(args[2]);
+        std::string color = "black";
+        int size = 20;
+        
+        if (args.size() >= 4) color = objToString(args[3]);
+        if (args.size() >= 5) size = asInt(args[4]);
 
-    SysGui::drawText(x, y, text, color, size);
-    return Obj(0);
+        SysGui::drawText(x, y, text, color, size);
+        return Obj(0);
     };
     
-    nativeRegistry["gui_rect"] = [this](const std::vector<Obj>& args) -> Obj {
-    if (args.size() < 5) return Obj(0);
-    int x = std::stoi(objToString(args[0]));
-    int y = std::stoi(objToString(args[1]));
-    int w = std::stoi(objToString(args[2]));
-    int h = std::stoi(objToString(args[3]));
-    std::string color = objToString(args[4]);
-    SysGui::drawRect(x, y, w, h, color);
-    return Obj(0);
+    nativeRegistry["gui_rect"] = [asInt, this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() < 5) return Obj(0);
+        int x = asInt(args[0]);
+        int y = asInt(args[1]);
+        int w = asInt(args[2]);
+        int h = asInt(args[3]);
+        std::string color = objToString(args[4]);
+        SysGui::drawRect(x, y, w, h, color);
+        return Obj(0);
     };
 
 	nativeRegistry["gui_is_mouse_down"] = [this](const std::vector<Obj>& args) -> Obj {
@@ -679,6 +734,96 @@ void Runtime::initNativeFunctions() {
     SysGui::stop();
     return Obj(true);
     };
+    nativeRegistry["gui_get_time"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj(SysGui::getTime());
+    };
+
+    // ==========================================
+    // AUDIO MODULE (Bridge to src/link_audio.cpp)
+    // ==========================================
+    nativeRegistry["audio.init"] = [](const std::vector<Obj>& args) -> Obj {
+        SysAudio::init();
+        return Obj(0);
+    };
+
+    nativeRegistry["audio.get_eq"] = [](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty() && std::holds_alternative<int>(args[0].as)) {
+            int band = std::get<int>(args[0].as);
+            return Obj((double)SysAudio::getSpectrum(band));
+        }
+        return Obj(0.0);
+    };
+
+    nativeRegistry["audio.play"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.empty()) {
+            SysAudio::resume(); // If called without arguments, treat it as Resume
+            return Obj(true);
+        }
+        std::string path = objToString(args[0]);
+        return Obj(SysAudio::play(path)); // Load dan Play lagu baru
+    };
+
+    nativeRegistry["audio.pause"] = [](const std::vector<Obj>& args) -> Obj {
+        SysAudio::pause();
+        return Obj(0);
+    };
+
+    nativeRegistry["audio.stop"] = [](const std::vector<Obj>& args) -> Obj {
+        SysAudio::stop();
+        return Obj(0);
+    };
+
+    nativeRegistry["audio.update"] = [](const std::vector<Obj>& args) -> Obj {
+        SysAudio::update();
+        return Obj(0);
+    };
+
+    nativeRegistry["audio.volume"] = [](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty() && std::holds_alternative<double>(args[0].as)) {
+            SysAudio::setVolume((float)std::get<double>(args[0].as));
+        }
+        return Obj(0);
+    };
+
+    nativeRegistry["audio.length"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj((double)SysAudio::getTimeLength());
+    };
+
+    nativeRegistry["audio.played"] = [](const std::vector<Obj>& args) -> Obj {
+        return Obj((double)SysAudio::getTimePlayed());
+    };
+
+    nativeRegistry["audio.seek"] = [](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty() && std::holds_alternative<double>(args[0].as)) {
+            SysAudio::seek((float)std::get<double>(args[0].as));
+        }
+        return Obj(0);
+    };
+
+    nativeRegistry["audio.close"] = [](const std::vector<Obj>& args) -> Obj {
+        SysAudio::close();
+        return Obj(0);
+    };
+    nativeRegistry["audio.load_sound"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (args.size() >= 2) {
+            SysAudio::loadSound(objToString(args[0]), objToString(args[1]));
+        }
+        return Obj(0);
+    };
+
+    nativeRegistry["audio.play_sound"] = [this](const std::vector<Obj>& args) -> Obj {
+        if (!args.empty()) {
+            SysAudio::playSound(objToString(args[0]));
+        }
+        return Obj(0);
+    };
+    nativeRegistry["audio.spectrum"] = [](const std::vector<Obj>& args) -> Obj {
+    if (args.empty()) return Obj(0.0);
+    int band = 0;
+    if (std::holds_alternative<int>(args[0].as)) band = std::get<int>(args[0].as);
+    else if (std::holds_alternative<double>(args[0].as)) band = (int)std::get<double>(args[0].as);
+    return Obj((double)SysAudio::getSpectrum(band)); 
+    };
 }
 
 bool Runtime::isTruthy(const Obj& o) {
@@ -751,7 +896,7 @@ Obj Runtime::evaluateExpr(Expr* expr) {
     }
 
     // =========================================================
-    // 4. OOP LOGIC (Copy Paste logika OOP Anda yang lama disini)
+    // 4. OOP LOGIC (Copy paste your previous OOP logic here)
     // =========================================================
     if (auto newExpr = dynamic_cast<NewExpr*>(expr)) {
         Obj classObj = currentEnv->get(newExpr->className);
@@ -767,7 +912,7 @@ Obj Runtime::evaluateExpr(Expr* expr) {
             for (auto& arg : newExpr->args) args.push_back(evaluateExpr(arg.get()));
 
             auto prevEnv = currentEnv;
-            currentEnv = std::make_shared<Environment>(globalEnv.get());
+            currentEnv = std::make_shared<Environment>(globalEnv);
             currentEnv->define("this", Obj(instance));
             for (size_t i = 0; i < init->params.size(); ++i) {
                  if (i < args.size()) currentEnv->define(init->params[i], args[i]);
@@ -784,19 +929,33 @@ Obj Runtime::evaluateExpr(Expr* expr) {
     
     if (auto get = dynamic_cast<GetExpr*>(expr)) {
         Obj obj = evaluateExpr(get->object.get());
+        // 1. Check if it is an OOP instance
         if (std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) {
             auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
             if (instance->fields.count(get->name)) return instance->fields[get->name];
+        }
+        // 2. Check if it is a Dictionary (NEW FEATURE)
+        if (std::holds_alternative<std::shared_ptr<Dict>>(obj.as)) {
+            auto dict = std::get<std::shared_ptr<Dict>>(obj.as);
+            if (dict->count(get->name)) return (*dict)[get->name];
         }
         return Obj();
     }
     
     if (auto set = dynamic_cast<SetExpr*>(expr)) {
         Obj obj = evaluateExpr(set->object.get());
+        // 1. Check if it is an OOP instance
         if (std::holds_alternative<std::shared_ptr<LinkInstance>>(obj.as)) {
              auto instance = std::get<std::shared_ptr<LinkInstance>>(obj.as);
              Obj val = evaluateExpr(set->value.get());
              instance->fields[set->name] = val;
+             return val;
+        }
+        // 2. Check if it is a Dictionary (NEW FEATURE)
+        if (std::holds_alternative<std::shared_ptr<Dict>>(obj.as)) {
+             auto dict = std::get<std::shared_ptr<Dict>>(obj.as);
+             Obj val = evaluateExpr(set->value.get());
+             (*dict)[set->name] = val;
              return val;
         }
         return Obj();
@@ -813,7 +972,7 @@ Obj Runtime::evaluateExpr(Expr* expr) {
          for (auto& arg : methodCall->args) args.push_back(evaluateExpr(arg.get()));
          
          auto prevEnv = currentEnv;
-         currentEnv = std::make_shared<Environment>(globalEnv.get());
+         currentEnv = std::make_shared<Environment>(globalEnv);
          currentEnv->define("this", Obj(instance));
          for (size_t i = 0; i < method->params.size(); ++i) {
              if (i < args.size()) currentEnv->define(method->params[i], args[i]);
@@ -825,25 +984,34 @@ Obj Runtime::evaluateExpr(Expr* expr) {
     }
 
     // =========================================================
-    // 5. FUNCTION CALLS (INI YANG BERUBAH TOTAL!)
+    // 5. FUNCTION CALLS (THIS SECTION HAS COMPLETELY CHANGED!)
     // =========================================================
     if (auto call = dynamic_cast<CallExpr*>(expr)) {
         std::vector<Obj> args;
         for (auto& arg : call->args) {
             args.push_back(evaluateExpr(arg.get()));
         }
+        
+        // 1. Check Native Registry (print, os.exec, dll)
         if (nativeRegistry.find(call->func) != nativeRegistry.end()) {
             return nativeRegistry[call->func](args);
         }
-        if (functionRegistry.count(call->func)) {
-            FuncDecl* fn = functionRegistry[call->func];
+        
+        // 2. Execute from environment variable (user-defined function)
+        Obj callee = currentEnv->get(call->func);
+        if (std::holds_alternative<std::shared_ptr<LinkFunction>>(callee.as)) {
+            auto funcObj = std::get<std::shared_ptr<LinkFunction>>(callee.as);
+            FuncDecl* fn = funcObj->declaration;
+            
             if (args.size() != fn->params.size()) {
                 std::cout << "Runtime Error: Function " << fn->name << " arg mismatch.\n";
                 return Obj();
             }
 
             auto previousEnv = currentEnv;
-            currentEnv = std::make_shared<Environment>(globalEnv.get());
+            // New environment attaches to this function's closure
+            currentEnv = std::make_shared<Environment>(funcObj->closure);
+            
             for (size_t i = 0; i < fn->params.size(); ++i) {
                 currentEnv->define(fn->params[i], args[i]);
             }
@@ -852,18 +1020,19 @@ Obj Runtime::evaluateExpr(Expr* expr) {
                 for (auto& s : fn->body) runStatement(s.get());
             } catch (const ReturnException& e) {
                 currentEnv = previousEnv; 
-                return e.value;
+                return e.value; // Return the value
             }
 
             currentEnv = previousEnv;
             return Obj();
         }
+        
         std::cout << "Runtime Error: Unknown function '" << call->func << "'\n";
         return Obj();
     }
 
     // =========================================================
-    // 6. BINARY OPERATIONS (Tetap Sama, Copy Paste yang Lama)
+    // 6. BINARY OPERATIONS (Same as before, copy old logic)
     // =========================================================
             if (auto bin = dynamic_cast<BinaryExpr*>(expr)) {
             Obj left = evaluateExpr(bin->lhs.get());   
@@ -914,6 +1083,11 @@ Obj Runtime::evaluateExpr(Expr* expr) {
             } else if (std::holds_alternative<std::string>(left.as) && std::holds_alternative<std::string>(right.as)) {
                 if (bin->op == '=') return Obj(std::get<std::string>(left.as) == std::get<std::string>(right.as));
                 if (bin->op == '!') return Obj(std::get<std::string>(left.as) != std::get<std::string>(right.as));
+            } else if (std::holds_alternative<bool>(left.as) && std::holds_alternative<bool>(right.as)) {
+                bool l = std::get<bool>(left.as);
+                bool r = std::get<bool>(right.as);
+                if (bin->op == '=') return Obj(l == r);
+                if (bin->op == '!') return Obj(l != r);
             }
         }
 
@@ -930,7 +1104,7 @@ void Runtime::runStatement(Stmt* stmt) {
         return;
     }
     if (auto set = dynamic_cast<SetStmt*>(stmt)) {
-        currentEnv->define(set->name, evaluateExpr(set->expression.get()));
+        currentEnv->assign(set->name, evaluateExpr(set->expression.get()));
         return;
     }
     
@@ -956,25 +1130,36 @@ void Runtime::runStatement(Stmt* stmt) {
         std::vector<Obj> args;
         for (auto& arg : call->args) args.push_back(evaluateExpr(arg.get()));
 
-       
         if (nativeRegistry.count(call->func)) {
             nativeRegistry[call->func](args);
             return;
         }
 
-        if (functionRegistry.count(call->func)) {
-            FuncDecl* fn = functionRegistry[call->func];
+        // Fetch function from environment variable
+        Obj callee = currentEnv->get(call->func);
+        if (std::holds_alternative<std::shared_ptr<LinkFunction>>(callee.as)) {
+            auto funcObj = std::get<std::shared_ptr<LinkFunction>>(callee.as);
+            FuncDecl* fn = funcObj->declaration;
+            
             if (args.size() != fn->params.size()) {
                 std::cout << "Runtime Error: Arg mismatch.\n"; return;
             }
+            
             auto prevEnv = currentEnv;
-            currentEnv = std::make_shared<Environment>(globalEnv.get());
-            for (size_t i = 0; i < fn->params.size(); ++i) currentEnv->define(fn->params[i], args[i]);
-            try { for (auto& s : fn->body) runStatement(s.get()); } 
-            catch (const ReturnException&) {}
+            // New environment is parented to the function closure
+            currentEnv = std::make_shared<Environment>(funcObj->closure); 
+            
+            for (size_t i = 0; i < fn->params.size(); ++i) {
+                currentEnv->define(fn->params[i], args[i]);
+            }
+            try { 
+                for (auto& s : fn->body) runStatement(s.get()); 
+            } catch (const ReturnException&) {}
+            
             currentEnv = prevEnv;
             return;
         }
+        std::cout << "Runtime Error: Unknown function '" << call->func << "'\n";
         return;
     }
 
@@ -1027,7 +1212,7 @@ void Runtime::runStatement(Stmt* stmt) {
                 for (auto& s : tryStmt->tryBody) runStatement(s.get());
             } catch (const RuntimeException& e) {
                 auto prevEnv = currentEnv;
-                currentEnv = std::make_shared<Environment>(prevEnv.get());
+                currentEnv = std::make_shared<Environment>(prevEnv);
                 currentEnv->define(tryStmt->errorVar, Obj(e.message));
                 for (auto& s : tryStmt->catchBody) runStatement(s.get());
                 currentEnv = prevEnv;
@@ -1048,7 +1233,10 @@ void Runtime::runStatement(Stmt* stmt) {
 
     // 5. DEFINITIONS
     if (auto func = dynamic_cast<FuncDecl*>(stmt)) {
-        functionRegistry[func->name] = func;
+        auto linkFunc = std::make_shared<LinkFunction>();
+        linkFunc->declaration = func;
+        linkFunc->closure = currentEnv; 
+        currentEnv->define(func->name, Obj(linkFunc)); 
         return;
     }
     if (auto cls = dynamic_cast<ClassDecl*>(stmt)) {
@@ -1090,6 +1278,120 @@ void Runtime::runStatement(Stmt* stmt) {
              }
          }
          return;
+    }
+    if (auto ext = dynamic_cast<ExternStmt*>(stmt)) {
+        #ifdef _WIN32
+        std::cout << "Runtime Error: Extern blocks require POSIX environments.\n";
+        return;
+        #else
+        
+        // --- 1. DETECT ALL ACTIVE VARIABLES IN LINK-LANG ---
+        std::vector<std::string> int_vars;
+        std::vector<std::string> double_vars;
+        
+        // Collect from current scope up to global
+        Environment* env_ptr = currentEnv.get();
+        std::unordered_map<std::string, Obj> all_vars;
+        while (env_ptr) {
+            for (const auto& [name, val] : env_ptr->values) {
+                if (all_vars.find(name) == all_vars.end()) all_vars[name] = val;
+            }
+            env_ptr = env_ptr->enclosing.get();
+        }
+
+        // Separate into Int and Double
+        for (const auto& [name, val] : all_vars) {
+            if (std::holds_alternative<int>(val.as)) int_vars.push_back(name);
+            else if (std::holds_alternative<double>(val.as)) double_vars.push_back(name);
+        }
+
+        // --- 2. GENERATE SIGNATURE FOR CACHING ---
+        std::string var_signature = "";
+        for (auto& n : int_vars) var_signature += n + "i,";
+        for (auto& n : double_vars) var_signature += n + "d,";
+        
+        std::string hashName = "mod_ext_" + std::to_string(std::hash<std::string>{}(ext->code + var_signature));
+        std::string cacheDir = ".link_cache/";
+        Sys::exec(("mkdir -p " + cacheDir).c_str()); 
+        
+        std::string cppPath = cacheDir + hashName + ".cpp";
+        std::string soPath = cacheDir + hashName + ".so";
+
+        // --- 3. WRITE C++ FILE IF NOT CACHED ---
+        if (!Sys::fileExists(soPath)) {
+            std::string includes = "", body = "";
+            std::istringstream stream(ext->code);
+            std::string line;
+            while (std::getline(stream, line)) {
+                size_t start = line.find_first_not_of(" \t");
+                if (start != std::string::npos && line[start] == '#') includes += line + "\n";
+                else body += line + "\n"; 
+            }
+
+            std::ofstream out(cppPath);
+            out << "#include <iostream>\n#include <string>\n";
+            out << "#define print(x) std::cout << (x) << std::endl;\n";
+        
+            // Int memory at offset 0 - 2047
+            for (size_t i = 0; i < int_vars.size(); i++) {
+                out << "#define LINK_" << int_vars[i] << " (((int*)link_shm)[" << i << "])\n";
+            }
+            // Memori Double di offset 2048 - 4095
+            for (size_t i = 0; i < double_vars.size(); i++) {
+                out << "#define LINK_" << double_vars[i] << " (((double*)((char*)link_shm + 2048))[" << i << "])\n";
+            }
+
+            out << includes << "\nextern \"C\" void link_entry(void* link_shm) {\n" << body << "\n}\n";
+            out.close();
+
+            std::string cmd = "g++ -shared -fPIC -o " + soPath + " " + cppPath + " " + ext->flags;
+            
+            if (system(cmd.c_str()) != 0) {
+                std::cout << "Runtime Error: Gagal mengkompilasi C++ native.\n"; return;
+            }
+        }
+
+        // --- 4. SETUP POSIX SHARED MEMORY ---
+        const char* shm_name = "/link_lang_shm";
+        int shm_fd = shm_open(shm_name, O_CREAT | O_RDWR, 0666);
+        ftruncate(shm_fd, 4096); 
+        void* shared_mem = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+
+        // --- 5. PUSH: LINK-LANG -> SHARED MEMORY ---
+        int* shm_ints = (int*)shared_mem;
+        double* shm_doubles = (double*)((char*)shared_mem + 2048);
+        
+        for (size_t i = 0; i < int_vars.size(); i++) 
+            shm_ints[i] = std::get<int>(all_vars[int_vars[i]].as);
+            
+        for (size_t i = 0; i < double_vars.size(); i++) 
+            shm_doubles[i] = std::get<double>(all_vars[double_vars[i]].as);
+
+        // --- 6. EXECUTE C++ (FORK) ---
+        pid_t pid = fork();
+        if (pid == 0) {
+            void* handle = dlopen(soPath.c_str(), RTLD_NOW);
+            if (handle) {
+                typedef void (*EntryFunc)(void*);
+                auto func = (EntryFunc)dlsym(handle, "link_entry");
+                if (func) func(shared_mem); 
+                dlclose(handle);
+            }
+            exit(0); 
+        } else if (pid > 0) {
+            int status; waitpid(pid, &status, 0); 
+            
+            // --- 7. PULL: SHARED MEMORY -> LINK-LANG ---
+            for (size_t i = 0; i < int_vars.size(); i++) 
+                currentEnv->assign(int_vars[i], Obj(shm_ints[i]));
+                
+            for (size_t i = 0; i < double_vars.size(); i++) 
+                currentEnv->assign(double_vars[i], Obj(shm_doubles[i]));
+
+            munmap(shared_mem, 4096); shm_unlink(shm_name);
+        }
+        #endif
+        return;
     }
 }
 
