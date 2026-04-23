@@ -1,13 +1,3 @@
-Absolutely! This is a huge milestone. The leap from version 0.4 to 0.5a is
-massive (evolving from a simple scripting tool into a capable Game Engine with
-Native C++ support).
-
-I have updated your README.md. I kept all your original points exactly as they
-were, and added new sections to highlight the epic v0.5a features. I also
-updated the compilation instructions since Raylib is now required.
-
-Here is your new README.md text:
-
 ```text
 ██╗     ██╗███╗   ██╗██╗  ██╗           ██╗      █████╗ ███╗   ██╗ ██████╗ 
 ██║     ██║████╗  ██║██║ ██╔╝           ██║     ██╔══██╗████╗  ██║██╔════╝ 
