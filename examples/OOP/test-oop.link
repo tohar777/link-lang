@@ -1,6 +1,6 @@
 print("=== [STEP 1] STARTING SCRIPT ===")
 
-# Definisi Kelas
+# Class Definition
 print("=== [STEP 2] DEFINING CLASS ROBOT ===")
 class Robot {
     # Constructor
@@ -24,12 +24,12 @@ class Robot {
 }
 print("=== [STEP 3] CLASS DEFINED SUCCESSFULLY ===")
 
-# Instansiasi Objek
+# Object Instantiation
 print("=== [STEP 4] CREATING OBJECT R1 ===")
 set r1 = new Robot("Optimus", 100)
 print("=== [STEP 5] R1 CREATED ===")
 
-# Panggil Method
+# Call Method
 print("=== [STEP 6] CALLING R1.WALK() ===")
 r1.walk()
 

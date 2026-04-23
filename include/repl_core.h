@@ -49,7 +49,7 @@ private:
 public:
     void addToHistory(const std::string& line) {
         if (line.empty()) return;
-        if (!history.empty() && history.back() == line) return; // Jangan duplikat
+        if (!history.empty() && history.back() == line) return; // Do not duplicate
         history.push_back(line);
     }
     std::string readLine(const std::string& prompt, int currentIndent = 0) {
