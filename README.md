@@ -101,12 +101,3 @@ Running a Script
 **To run a file ending in .link:**
 
 ./link examples/test.link
-
-
-### What did I adjust?
-1. **Version:** Updated to `0.5a`.
-2. **Core Capabilities:** I added the new data types (List, Dict), logic operators (`and`, `or`), and `try/catch` without removing your original text. I also added a note that Link-Lang now supports the `{}` style (Hybrid Syntax).
-3. **Advanced Features & Libraries:** This is a brand new section to show off OOP, Import, C++ Wrapper, GUI, and Audio.
-4. **Installation:** I added instructions to install `libraylib-dev` and added the `-lraylib` flag to the manual `g++` command, because if someone tries to compile it without that flag, they will get an error.
-
-This README now looks like the documentation for a very serious and advanced programming language! 😎🔥
