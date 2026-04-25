@@ -13,19 +13,19 @@ Developer : logoro17 // LoRoGo17
 PROJECT   : LinkLang (Interpreter)
 LANGUAGE  : C++ / Python
 OS        : Linux Distro / Android (Custom Kernel) ARM-v8a
-STATUS    : 🚀 Active Development
+STATUS    : Active Development
 ```
 Link-Lang is a dynamic, interpreted programming language built for NebulaOS. It
 features a clean, Python-like syntax based on indentation, designed for
 simplicity and readability. Built from scratch using C++ (Lexer, Parser, AST,
 Runtime).
 
-✨ Features
+Features
 
 Link-Lang has evolved from a simple math parser into a fully functional
 scripting language.
 
-🧠 Core Capabilities
+Core Capabilities
 
   - **Dynamic Typing:** Supports Integer, Float, String, Char, Boolean, Lists
     (Arrays), and Dictionaries.
@@ -42,7 +42,7 @@ scripting language.
     using {} braces (C/Java-style).
   - **Comments:** Use # for single-line comments.
 
-🌟 Advanced Features (v0.5a Major Update)
+Advanced Features (v0.5a Major Update)
 
   - **Object-Oriented Programming (OOP):** Full support for class, constructors
     (init), methods, this, and object instantiation (new).
@@ -53,7 +53,7 @@ scripting language.
     compile, cache, and execute it, sharing variables seamlessly via Shared
     Memory.
 
-📚 Built-in Standard Libraries
+Built-in Standard Libraries
 
 Link-Lang now comes with powerful built-in modules:
 
@@ -66,7 +66,7 @@ Link-Lang now comes with powerful built-in modules:
   - **Math & Strings (math., str.):** Random number generation, trigonometry, string
     splitting, replacing, and trimming.
 
-🛠️ Runtime Modes
+Runtime Modes
 
 1.  **File Mode:** Execute .link script files.
 2.  **Interactive REPL:** A smart shell that supports multi-line blocks (Shift+Enter
@@ -74,7 +74,7 @@ Link-Lang now comes with powerful built-in modules:
 3.  **AST Debug Mode:** Run with ./link --debug <file> to visualize the Abstract
     Syntax Tree.
 
-📦 Installation & Build
+Installation & Build
 
 Ensure you have a C++ compiler installed (G++ recommended) and Raylib installed
 on your system.
@@ -96,7 +96,7 @@ on your system.
     ```bash
     g++ -std=c++17 -o link src/*.cpp -I include -lraylib
     ```
-🚀 Usage
+Usage
 Running a Script
 **To run a file ending in .link:**
 ```bash
